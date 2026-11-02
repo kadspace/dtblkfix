@@ -29,6 +29,8 @@ General Public License for more details.
 ***************************************************************************************************/
 #include <StdAfx.h>
 
+#include <limits.h>
+#include <math.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -295,7 +297,13 @@ void DtBlkFx::init()
   // these will be updated on first poll
   _prev_poll_abs = 0;
   _samps_per_poll = 0;
-  _beat_start_abs = 0;
+
+  // beat grid starts at sample 0 until the host tells us otherwise
+  _sync_seg_n = 1;
+  _sync_seg[0].start_abs = 0;
+  _sync_seg[0].ppq0_abs = 0.0;
+  _sync_seg[0].samps_per_beat = _samps_per_beat;
+  _have_ppq = false;
 
   _params_state = PARAMS_CHK_SYNC;
   _params_need_processing = true;
@@ -602,20 +610,7 @@ inline void DtBlkFx::pollUpdate(bool force)
   if (!force && _curr_samp_abs - _prev_poll_abs < _samps_per_poll)
     return;
 
-  // ask host for tempo
-  VstTimeInfo* ti = getTimeInfo(kVstTempoValid | kVstPpqPosValid);
-  if (ti) {
-    //((MyInfo*)ti)->dbgprint();
-    if (ti->flags & kVstTempoValid)
-      _samps_per_beat = (float)(60.0 * sampleRate / ti->tempo);
-
-    float ppq_pos = (float)ti->ppqPos;
-    float ppq_frac = ppq_pos - floorf(ppq_pos);
-
-    // work out sample position of the start of the current beat
-    if (ti->flags & kVstPpqPosValid)
-      _beat_start_abs = _curr_samp_abs - (long)(ppq_frac * _samps_per_beat);
-  }
+  // DtBlkFix: tempo and song position are read on every buffer by readSongPos()
 
   // calculate samples per tick (based on tempo)
   float samps_per_tick = (1.0f / (float)BlkFxParam::TICKS_PER_BEAT) * _samps_per_beat;
@@ -632,6 +627,90 @@ inline void DtBlkFx::pollUpdate(bool force)
 
   // min number of samps we can mv fwd to get the next blk
   _min_blk_fwd_samps = max(64L, (long)samps_per_tick);
+}
+
+//-------------------------------------------------------------------------------------------------
+inline void DtBlkFx::readSongPos()
+// internal method, called at the start of every buffer
+//
+// DtBlkFix: the original asked the host for the tempo and song position about once a beat, so
+// with Sync on the blocks drifted off the beat after loops, jumps and tempo changes until the
+// next poll. Now they are read on every buffer and kept as a list of beat grids (_sync_seg), so
+// the grid in force at any sample is known when a block start is chosen, however the host splits
+// its buffers.
+{
+  VstTimeInfo* ti = getTimeInfo(kVstTempoValid | kVstPpqPosValid | kVstTimeSigValid);
+  if (!ti)
+    return;
+
+  SyncSeg cur = _sync_seg[_sync_seg_n - 1];
+  SyncSeg seg = cur;
+  seg.start_abs = _curr_samp_abs;
+
+  if ((ti->flags & kVstTempoValid) && ti->tempo > 0) {
+    seg.samps_per_beat = 60.0 * sampleRate / ti->tempo;
+
+    // update the values that depend on the tempo straight away
+    if (_samps_per_beat != (float)seg.samps_per_beat) {
+      _samps_per_beat = (float)seg.samps_per_beat;
+      pollUpdate(/*force*/ true);
+    }
+
+    // keep the beat phase at this sample if only the tempo changes
+    double beats = ((double)_curr_samp_abs - cur.ppq0_abs) / cur.samps_per_beat;
+    seg.ppq0_abs = (double)_curr_samp_abs - beats * seg.samps_per_beat;
+  }
+
+  // while stopped the position stands still: keep the grid running from where it was
+  if ((ti->flags & kVstPpqPosValid) && ((ti->flags & kVstTransportPlaying) || !_have_ppq)) {
+    seg.ppq0_abs = (double)_curr_samp_abs - ti->ppqPos * seg.samps_per_beat;
+    _have_ppq = true;
+  }
+
+  // a new grid only if the tempo changed or the position moved by half a sample or more (a
+  // loop or jump), otherwise rounding in the host's position would move the grid around
+  if (seg.samps_per_beat == cur.samps_per_beat && fabs(seg.ppq0_abs - cur.ppq0_abs) < 0.5)
+    return;
+
+  if (seg.samps_per_beat <= 0.0)
+    return;
+
+  // forget grids that end before the current block (a block start is never chosen before it)
+  int drop = 0;
+  while (drop < _sync_seg_n - 1 && _sync_seg[drop + 1].start_abs <= _blk_samp_abs)
+    drop++;
+  if (_sync_seg_n - drop >= MAX_SYNC_SEGS)
+    drop = _sync_seg_n - MAX_SYNC_SEGS + 1;
+  for (int i = drop; i < _sync_seg_n; i++)
+    _sync_seg[i - drop] = _sync_seg[i];
+  _sync_seg_n -= drop;
+
+  // replace a grid that starts here, otherwise add
+  if (_sync_seg[_sync_seg_n - 1].start_abs >= seg.start_abs)
+    _sync_seg[_sync_seg_n - 1] = seg;
+  else
+    _sync_seg[_sync_seg_n++] = seg;
+}
+
+//-------------------------------------------------------------------------------------------------
+inline long DtBlkFx::beatAtOrBefore(long samp_abs)
+// internal method
+// return the absolute sample position of the last beat at or before samp_abs
+{
+  for (int i = _sync_seg_n - 1; i >= 0; i--) {
+    const SyncSeg& seg = _sync_seg[i];
+    if (seg.start_abs > samp_abs)
+      continue;
+
+    double k = floor(((double)samp_abs - seg.ppq0_abs) / seg.samps_per_beat);
+    long beat_abs = (long)floor(seg.ppq0_abs + k * seg.samps_per_beat + 0.5);
+    if (beat_abs >= seg.start_abs)
+      return beat_abs;
+
+    // no beat in this grid before samp_abs, look in the one before
+    samp_abs = seg.start_abs - 1;
+  }
+  return LONG_MIN;
 }
 
 //-------------------------------------------------------------------------------------------------
@@ -1521,15 +1600,15 @@ inline void DtBlkFx::nextBlk()
     // next blk sample position as determined from current overlap param
     long next_blk_samp_abs = _blk_samp_abs + _next_blk_fwd_n;
 
-    // find the sample position of the closest sync position before current next blk
-    float units = ceilf((_beat_start_abs - next_blk_samp_abs) / beat_sync);
-    long sync_abs = (long)(_beat_start_abs - units * beat_sync);
-    long sync_fwd = sync_abs - _blk_samp_abs;
-
-    // LOG("", "nextBlk, blksync" <<VAR(_next_blk_fwd_n) <<VAR(sync_fwd) <<VAR(_blk_samp_abs)
-    // <<VAR(next_blk_samp_abs)<<VAR(beats)<<VAR(sync_abs)<<VAR(overlap_param));
-    if (sync_fwd > _min_blk_fwd_samps && sync_fwd <= _next_blk_fwd_n)
-      _next_blk_fwd_n = sync_fwd;
+    // DtBlkFix: find the last beat at or before the next blk using the song position at that
+    // sample, and move to it if it's at least the minimum blk step ahead (the original required
+    // a 16th of a beat, which skipped beats that fell just after a blk start)
+    long sync_abs = beatAtOrBefore(next_blk_samp_abs);
+    if (sync_abs != LONG_MIN) {
+      long sync_fwd = sync_abs - _blk_samp_abs;
+      if (sync_fwd >= MIN_BLK_FWD_N && sync_fwd <= _next_blk_fwd_n)
+        _next_blk_fwd_n = sync_fwd;
+    }
   }
 
   _params_state = PARAMS_CHK_SYNC;
@@ -1580,6 +1659,7 @@ inline void DtBlkFx::_process(float** in_buf, long buf_n)
 {
   ScopeCriticalSection scs(_protect);
 
+  readSongPos();
   pollUpdate(/*force*/ false);
 
   copyInBuf(in_buf, buf_n);
