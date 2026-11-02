@@ -345,3 +345,6 @@ MigrationBackup/
 
 # Steinberg VST2 SDK (not redistributable, copy it in to build)
 vstsdk/
+
+# CMake build folder
+/build/
