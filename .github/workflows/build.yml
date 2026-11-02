@@ -1,0 +1,55 @@
+name: build
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+  workflow_call:
+
+env:
+  JUCE_TAG: "8.0.15"
+  FFTW_URL: "https://fftw.org/pub/fftw/fftw-3.3.5-dll64.zip"
+  FFTW_SHA256: "cfd88dc0e8d7001115ea79e069a2c695d52c8947f5b4f3b7ac54a192756f439f"
+  # the original engine the renders are compared against (DtBlkFx with the latency fix, as on main)
+  REFERENCE_COMMIT: "ab3dba73c7a7a424b8e6309a2c0a76a696504a62"
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: FFTW
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force build\fftw | Out-Null
+          Invoke-WebRequest -Uri $env:FFTW_URL -OutFile build\fftw.zip
+          $hash = (Get-FileHash build\fftw.zip -Algorithm SHA256).Hash.ToLower()
+          if ($hash -ne $env:FFTW_SHA256) { throw "FFTW zip checksum mismatch: $hash" }
+          Expand-Archive build\fftw.zip -DestinationPath build\fftw -Force
+
+      - name: Original engine for the comparison tests
+        shell: bash
+        run: |
+          mkdir -p build/reference
+          git archive "$REFERENCE_COMMIT" dtblkfx vstgui fftw libpng zlib projects | tar -x -C build/reference
+
+      - name: JUCE
+        shell: bash
+        run: git clone --depth 1 --branch "$JUCE_TAG" https://github.com/juce-framework/JUCE.git build/JUCE
+
+      - name: Configure
+        shell: bash
+        run: >
+          cmake -S . -B build/cmake -G "Visual Studio 17 2022" -A x64
+          -DDTBLKFIX_JUCE_DIR="$PWD/build/JUCE"
+          -DDTBLKFIX_REFERENCE_DIR="$PWD/build/reference"
+          -DDTBLKFIX_FFTW_DIR="$PWD/build/fftw"
+
+      - name: Build
+        run: cmake --build build/cmake --config Release --parallel
+
+      - name: Test
+        run: ctest --test-dir build/cmake -C Release --output-on-failure -j 2
