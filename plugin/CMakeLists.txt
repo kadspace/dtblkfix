@@ -24,7 +24,8 @@ juce_add_plugin(DtBlkFix
 
 target_sources(DtBlkFix PRIVATE PluginProcessor.cpp PluginEditor.cpp)
 set(DTBLKFIX_JUCE_DEFS JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0 JUCE_VST3_CAN_REPLACE_VST2=0
-    JUCE_REPORT_APP_USAGE=0 JUCE_STANDALONE_FILTER_WINDOW_USE_KIOSK_MODE=0)
+    JUCE_REPORT_APP_USAGE=0 JUCE_STANDALONE_FILTER_WINDOW_USE_KIOSK_MODE=0
+    JUCE_GUI_BASICS_INCLUDE_SCOPED_THREAD_DPI_AWARENESS_SETTER=1)
 target_compile_definitions(DtBlkFix PUBLIC ${DTBLKFIX_JUCE_DEFS})
 target_link_libraries(DtBlkFix
   PRIVATE dtblkfix_bridge juce::juce_audio_utils juce::juce_gui_extra

@@ -21,12 +21,11 @@ namespace dtblkfix {
 //-------------------------------------------------------------------------------------------------
 static HMODULE ThisModule()
 {
-  HMODULE module = NULL;
-  GetModuleHandleExA(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
-                         GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
-                     (LPCSTR)&ThisModule,
-                     &module);
-  return module;
+  // the module this code is in (StdAfx.h targets Windows 2000, before GetModuleHandleEx)
+  MEMORY_BASIC_INFORMATION mbi;
+  if (!VirtualQuery((void*)&ThisModule, &mbi, sizeof(mbi)))
+    return NULL;
+  return (HMODULE)mbi.AllocationBase;
 }
 
 static bool Exists(const std::string& path)

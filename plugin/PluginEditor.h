@@ -11,7 +11,7 @@ class DtBlkFixEditor
     : public juce::AudioProcessorEditor
     , private juce::Timer {
 public:
-  explicit DtBlkFixEditor(DtBlkFixProcessor& processor);
+  explicit DtBlkFixEditor(DtBlkFixProcessor& p);
   ~DtBlkFixEditor() override;
 
   void paint(juce::Graphics& g) override;
@@ -32,6 +32,7 @@ private:
   // editor size in pixels & the display scale it was fitted for
   int _pix_width = 0, _pix_height = 0;
   float _display_scale = 0.0f;
+  bool _open = false;
 
   JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(DtBlkFixEditor)
 };

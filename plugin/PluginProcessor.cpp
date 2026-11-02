@@ -153,7 +153,9 @@ void DtBlkFixProcessor::setCurrentProgram(int index)
   if (index < 0 || index >= getNumPrograms())
     return;
   _engine->setProgram(index);
-  updateHostDisplay(ChangeDetails().withProgramChanged(true).withParameterInfoChanged(true));
+  updateHostDisplay(juce::AudioProcessorListener::ChangeDetails()
+                        .withProgramChanged(true)
+                        .withParameterInfoChanged(true));
 }
 
 const juce::String DtBlkFixProcessor::getProgramName(int index)
@@ -186,7 +188,9 @@ void DtBlkFixProcessor::setStateInformation(const void* data, int size)
   view = new_view;
   if (view_changed)
     triggerAsyncUpdate();
-  updateHostDisplay(ChangeDetails().withProgramChanged(true).withParameterInfoChanged(true));
+  updateHostDisplay(juce::AudioProcessorListener::ChangeDetails()
+                        .withProgramChanged(true)
+                        .withParameterInfoChanged(true));
 }
 
 //-------------------------------------------------------------------------------------------------

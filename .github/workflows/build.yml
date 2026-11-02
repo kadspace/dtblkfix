@@ -53,12 +53,12 @@ jobs:
         run: git clone --depth 1 --branch "$JUCE_TAG" https://github.com/juce-framework/JUCE.git build/JUCE
 
       - name: Configure
-        shell: bash
+        shell: pwsh
         run: >
           cmake -S . -B build/cmake -G "Visual Studio 17 2022" -A x64
-          -DDTBLKFIX_JUCE_DIR="$PWD/build/JUCE"
-          -DDTBLKFIX_REFERENCE_DIR="$PWD/build/reference"
-          -DDTBLKFIX_FFTW_DIR="$PWD/build/fftw"
+          "-DDTBLKFIX_JUCE_DIR=$PWD/build/JUCE"
+          "-DDTBLKFIX_REFERENCE_DIR=$PWD/build/reference"
+          "-DDTBLKFIX_FFTW_DIR=$PWD/build/fftw"
 
       - name: Build
         run: cmake --build build/cmake --config Release --parallel

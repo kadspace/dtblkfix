@@ -4,12 +4,16 @@
 
 #include <algorithm>
 
-DtBlkFixEditor::DtBlkFixEditor(DtBlkFixProcessor& processor)
-    : juce::AudioProcessorEditor(processor)
-    , _processor(processor)
+DtBlkFixEditor::DtBlkFixEditor(DtBlkFixProcessor& p)
+    : juce::AudioProcessorEditor(p)
+    , _processor(p)
 {
   setOpaque(true);
   addAndMakeVisible(_host);
+
+  // size before there's a window, the editor opens once there is
+  _processor.engine().editorSize(_processor.view.scale_pct, _pix_width, _pix_height);
+  setSize(_pix_width, _pix_height);
   openEditor();
 
   // Size or Skin picked in the editor (or a new state loaded): reopen at the new size
@@ -31,6 +35,11 @@ DtBlkFixEditor::~DtBlkFixEditor()
 
 void DtBlkFixEditor::openEditor()
 {
+  // the original editor needs a native window to live in
+  auto* peer = getPeer();
+  if (_open || peer == nullptr)
+    return;
+
   dtblkfix::Engine& engine = _processor.engine();
   std::vector<std::string> skins = dtblkfix::Engine::skinNames();
   int skin_idx = 0;
@@ -38,24 +47,32 @@ void DtBlkFixEditor::openEditor()
     if (skins[i] == _processor.view.skin)
       skin_idx = i;
 
-  int scale_pct = _processor.view.scale_pct;
   std::vector<int> scales = dtblkfix::Engine::scales();
-  if (std::find(scales.begin(), scales.end(), scale_pct) == scales.end())
-    scale_pct = _processor.view.scale_pct = 100;
+  if (std::find(scales.begin(), scales.end(), _processor.view.scale_pct) == scales.end())
+    _processor.view.scale_pct = 100;
+  int scale_pct = _processor.view.scale_pct;
 
   engine.editorSize(scale_pct, _pix_width, _pix_height);
-  void* window = engine.createEditorWindow(_pix_width, _pix_height);
-  _host.setHWND(window);
-  engine.openEditor(window, scale_pct, skin_idx);
+  {
+    // create it with the same DPI awareness as JUCE's window, so that it can be its child
+    juce::ScopedThreadDPIAwarenessSetter dpi_awareness(peer->getNativeHandle());
+    void* window = engine.createEditorWindow(_pix_width, _pix_height);
+    _host.setHWND(window);
+    engine.openEditor(window, scale_pct, skin_idx);
+  }
+  _open = true;
   _display_scale = 0.0f;
   updateSize();
 }
 
 void DtBlkFixEditor::closeEditor()
 {
+  if (!_open)
+    return;
   // close the original editor before its window goes
   _processor.engine().closeEditor();
   _host.setHWND(nullptr);
+  _open = false;
 }
 
 void DtBlkFixEditor::updateSize()
@@ -82,11 +99,14 @@ void DtBlkFixEditor::resized()
 
 void DtBlkFixEditor::parentHierarchyChanged()
 {
+  openEditor();
   updateSize();
 }
 
 void DtBlkFixEditor::timerCallback()
 {
+  openEditor();
   updateSize();
-  _processor.engine().idleEditor();
+  if (_open)
+    _processor.engine().idleEditor();
 }
