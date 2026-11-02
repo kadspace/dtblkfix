@@ -71,6 +71,7 @@ int main(int argc, char** argv)
   float scale = 1.0f;
   const char* skin = NULL;
   int preset = 33;
+  int hold_ms = 0; // keep the editor live this long before the screenshot
   for (int i = 3; i + 1 < argc; i += 2) {
     if (!strcmp(argv[i], "--scale"))
       scale = (float)atof(argv[i + 1]);
@@ -78,6 +79,8 @@ int main(int argc, char** argv)
       skin = argv[i + 1];
     else if (!strcmp(argv[i], "--preset"))
       preset = atoi(argv[i + 1]);
+    else if (!strcmp(argv[i], "--hold"))
+      hold_ms = atoi(argv[i + 1]) * 1000;
   }
 
   // pixels are pixels (StdAfx.h targets Windows 2000, so look this up)
@@ -146,7 +149,7 @@ int main(int argc, char** argv)
     Sleep(5);
   }
   InvalidateRect(wnd, NULL, TRUE);
-  for (int i = 0; i < 20; i++) {
+  for (int i = 0; i < 20 + hold_ms / 10; i++) {
     gui->idle();
     Pump();
     Sleep(10);
