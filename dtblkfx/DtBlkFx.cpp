@@ -167,13 +167,13 @@ DtBlkFx::DtBlkFx(audioMasterCallback audioMaster)
   _samps_per_beat = 4000.0f;
   _min_blk_fwd_samps = 64;
 
-  // didn't work in fl studio or renoise for delay of 4096
-  _initial_delay = 0;
+  // latency = one block (default 4096 samples), compensated by the host
+  _initial_delay = g_fft_sz[16];
   setInitialDelay(_initial_delay);
 
   // these were registered from steinberg
   if (AUDIO_CHANNELS == 2)
-    setUniqueID('h526');
+    setUniqueID('dBfX'); // DtBlkFix: own ID so it installs next to the original
   else
     setUniqueID('g319');
 
@@ -668,8 +668,22 @@ void DtBlkFx::setParameter(VstInt32 index, float value)
       _params_need_processing = true;
   }
 
+  if (index == BlkFxParam::FFT_LEN)
+    updateLatency(value);
+
   if (gui())
     gui()->setParameter(index, value);
+}
+
+//-------------------------------------------------------------------------------------------------
+void DtBlkFx::updateLatency(float fft_len_param)
+{
+  long n = g_fft_sz[BlkFxParam::getPlan(fft_len_param)];
+  if (n == _initial_delay)
+    return;
+  _initial_delay = n;
+  setInitialDelay(n);
+  ioChanged();
 }
 
 //-------------------------------------------------------------------------------------------------
@@ -766,11 +780,8 @@ bool /*true=printed*/ DtBlkFx::getParamDisplayGlobal(BlkFxParam::SplitParamNum& 
         return false;
 
       BlkFxParam::Delay delay(_delay_param(v));
-      float delay_samps = (float)getDelaySamps(delay) - _initial_delay;
-      if (delay.getUnits() == delay.BEATS)
-        text << sprf("%.2f beats", delay_samps / getSampsPerBeat());
-      else
-        text << sprnum(delay_samps / getSampleRate()) << "sec";
+      (void)delay;
+      text << "auto";
       return true;
     }
     case FFT_LEN: {
@@ -838,10 +849,7 @@ bool DtBlkFx::getEffectName(char* name)
 {
   LOG("", "DtBlkFx::getEffectName");
 
-  CharRng(name, kVstMaxEffectNameLen) << "DTBlkFx"
-#ifdef STEREO
-                                         "S"
-#endif
+  CharRng(name, kVstMaxEffectNameLen) << "DtBlkFix"
 #ifdef _DEBUG
                                          "Dbg"
 #endif
@@ -855,10 +863,7 @@ bool DtBlkFx::getProductString(char* text)
 // called by vst-host to get product string
 {
   LOG("", "DtBlkFx::getProductString");
-  CharRng(text, kVstMaxEffectNameLen) << "DTBlkFx"
-#ifdef STEREO
-                                         "S"
-#endif
+  CharRng(text, kVstMaxEffectNameLen) << "DtBlkFix"
 #ifdef _DEBUG
                                          "Dbg"
 #endif

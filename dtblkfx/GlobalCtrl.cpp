@@ -210,10 +210,8 @@ void GlobalCtrl::drawRect(CDrawContext* context, const CRect& update_rect_)
 
   //
   if (ShouldDrawView(update_rect, _delay)) {
-    if (delay_param.i_part == delay_param.BEATS)
-      str << sprf("%.2f beats", delay_samps / blkFx()->getSampsPerBeat());
-    else
-      str << sprnum(delay_samps / blkFx()->getSampleRate()) << "sec";
+    (void)delay_samps;
+    str << "auto";
 
     temp_bm->setFontColor(_delay->getState() == _delay->INACTIVE ? normal_txt_col : focus_txt_col);
     OutlineDrawString(temp_bm, textRect(_delay), str);

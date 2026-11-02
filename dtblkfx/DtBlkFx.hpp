@@ -158,6 +158,9 @@ public: //
   // initial delay passed to setInitialDelay()
   long _initial_delay;
 
+  // report one block of latency to the host for the given FFT_LEN param value
+  void updateLatency(float fft_len_param);
+
   // maximum number of samples delay
   long _max_delay_n;
 
@@ -381,13 +384,10 @@ inline long DtBlkFx::getDelaySamps(const BlkFxParam::Delay& delay)
 // given the vst param, return the corresponding number of samples delay (including any initial
 // delay)
 {
-  float samps = delay.getAmount();
-  if (delay.i_part == delay.MSEC)
-    samps *= sampleRate * 1e-3f;
-  else
-    samps *= _samps_per_beat;
-
-  return limit_range((long)samps + _initial_delay,
+  // DtBlkFix: the Delay knob is ignored. The output is delayed by exactly one block and that
+  // latency is reported to the host, which compensates for it (no more 1-beat offset).
+  (void)delay;
+  return limit_range(_initial_delay,
                      100,         // arbitrary minimum size
                      _max_delay_n // max delay
   );
