@@ -1,5 +1,4 @@
 # Tests. They need libfftw3f-3.dll: set DTBLKFIX_FFTW_DIR to the folder that holds it.
-set(DTBLKFIX_FFTW_DIR "" CACHE PATH "Folder with libfftw3f-3.dll (tests)")
 set(presets ${PROJECT_SOURCE_DIR}/resources/stereo_presets.txt)
 
 function(dtblkfix_test_exe name engine)
@@ -14,6 +13,14 @@ add_executable(dtblkfix_compare compare.cpp)
 
 # screenshots of the editor (not run as a test, it needs a desktop)
 dtblkfix_test_exe(dtblkfix_gui_snapshot dtblkfix_engine gui_snapshot.cpp)
+
+# plugin state (with size & skin) and editor through the wrapper's engine side
+add_executable(dtblkfix_bridge_test bridge_test.cpp)
+target_link_libraries(dtblkfix_bridge_test PRIVATE dtblkfix_bridge dtblkfix_engine)
+dtblkfix_copy_resources(dtblkfix_bridge_test $<TARGET_FILE_DIR:dtblkfix_bridge_test>/dtblkfx)
+if(DTBLKFIX_FFTW_DIR)
+  add_test(NAME state_and_editor COMMAND dtblkfix_bridge_test)
+endif()
 
 if(DTBLKFIX_FFTW_DIR)
   add_test(NAME sync COMMAND dtblkfix_sync_test ${DTBLKFIX_FFTW_DIR} ${presets})
