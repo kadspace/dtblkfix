@@ -80,6 +80,8 @@ function(dtblkfix_add_engine target root)
            ${root}/zlib ${DTBLKFIX_EXTRA_INCLUDE})
   dtblkfix_engine_options(${target})
   target_compile_definitions(${target} PUBLIC STEREO)
+  # the wrapper provides the entry points (DtBlkFxMain.cpp keeps them for the VST2 build)
+  target_compile_definitions(${target} PRIVATE DTBLKFIX_NO_VST2_MAIN)
   target_link_libraries(${target} PUBLIC dtblkfix_png user32 gdi32 msimg32 ole32 comdlg32 shell32
                                          advapi32 uuid)
 endfunction()

@@ -45,7 +45,7 @@ General Public License for more details.
 using namespace std;
 using namespace VSTGUI;
 
-enum { SGRAM_MENU_ID = 1000 };
+enum { SGRAM_MENU_ID = 1000, SIZE_MENU_ID = 1010, SKIN_MENU_ID = 1020 };
 
 //-------------------------------------------------------------------------------------------------
 Array<const char*, 7> g_sgram_menu_strings = {"Input L+R",
@@ -130,15 +130,27 @@ Gui::Gui(AudioEffect* effect)
   LOGG("", "Gui::Gui" << VAR(this));
   _ok = false;
 
+  // DtBlkFix: original images & size until setView() is called
+  _images.splash_bg = Images::g_splash_bg;
+  _images.glob_bg = Images::g_glob_bg;
+  _images.fx_bg = Images::g_fx_bg;
+  for (int i = 0; i < 2; i++) {
+    _images.slider_bg[i] = DtPopupHSlider::Images::g_bg[i];
+    _images.slider_knob[i] = DtPopupHSlider::Images::g_knob[i];
+  }
+  _scale = 1.0f;
+  _skin_idx = 0;
+  _view_listener = NULL;
+
   /*AEffGUIEditor*/ frame = 0;
 
   /*AEffGUIEditor::rect*/
   rect.left = 0;
   rect.top = 0;
-  rect.right = (VstInt16)Images::g_glob_bg->getWidth();
+  rect.right = (VstInt16)_images.glob_bg->getWidth();
   rect.bottom =
-      (VstInt16)(Images::g_glob_bg->getHeight() + Images::g_splash_bg->getHeight() + // spectrograms
-                 Images::g_fx_bg->getHeight() / 5 * BlkFxParam::NUM_FX_SETS);
+      (VstInt16)(_images.glob_bg->getHeight() + _images.splash_bg->getHeight() + // spectrograms
+                 _images.fx_bg->getHeight() / 5 * BlkFxParam::NUM_FX_SETS);
 
   // build the colour gradient map for the spectrograms, each 5 element array
   // contains: position (0..1), R, G, B, A
@@ -154,6 +166,19 @@ Gui::Gui(AudioEffect* effect)
 }
 
 //-------------------------------------------------------------------------------------------------
+void Gui::setView(float scale, const GuiImages& images, const std::vector<std::string>& skin_names,
+                  int skin_idx, const std::vector<int>& scales_pct, GuiViewListener* listener)
+// DtBlkFix: UI scale & skin, call while closed
+{
+  _scale = scale;
+  _images = images;
+  _skin_names = skin_names;
+  _skin_idx = skin_idx;
+  _scales_pct = scales_pct;
+  _view_listener = listener;
+}
+
+//-------------------------------------------------------------------------------------------------
 Gui::~Gui()
 {
   LOGG("", "Gui::~Gui" << VAR(this));
@@ -166,7 +191,7 @@ bool /*success*/ Gui::openSgram(int i, CPoint* p)
 
   // determine size of sgram based on splash background size
   CRect splash_bg_rect =
-      GetTile(Images::g_splash_bg, /*num x*/ 1, /*num y*/ 2, /*idx x*/ 0, /*idx y*/ i);
+      GetTile(_images.splash_bg, /*num x*/ 1, /*num y*/ 2, /*idx x*/ 0, /*idx y*/ i);
 
   //
   NewView(_sgram[i], frame);
@@ -199,6 +224,31 @@ bool /*success*/ Gui::openSgram(int i, CPoint* p)
     for (int j = 0; j < g_sgram_menu_strings.size(); j++)
       _sgram_menu[i]->addEntry(g_sgram_menu_strings[j], j);
 
+    // DtBlkFix: UI size & skin
+    if (_view_listener) {
+      CharArray<32> str;
+      _sgram_menu[i]->addEntry("-");
+
+      _size_menu[i].setNew(new COptionMenu(CRect(0, 0, 0, 0), this, SIZE_MENU_ID));
+      _size_menu[i]->setStyle(kCheckStyle);
+      int curr_scale = 0;
+      for (int j = 0; j < (int)_scales_pct.size(); j++) {
+        str << _scales_pct[j] << "%";
+        _size_menu[i]->addEntry(str, j);
+        if (_scales_pct[j] == RndToInt(_scale * 100.0f))
+          curr_scale = j;
+      }
+      _size_menu[i]->setCurrent(curr_scale);
+      _sgram_menu[i]->addEntry(_size_menu[i], "Size");
+
+      _skin_menu[i].setNew(new COptionMenu(CRect(0, 0, 0, 0), this, SKIN_MENU_ID));
+      _skin_menu[i]->setStyle(kCheckStyle);
+      for (int j = 0; j < (int)_skin_names.size(); j++)
+        _skin_menu[i]->addEntry(_skin_names[j].c_str(), j);
+      _skin_menu[i]->setCurrent(_skin_idx);
+      _sgram_menu[i]->addEntry(_skin_menu[i], "Skin");
+    }
+
     _sgram_menu[i]->setValue(i ? 3 : 0);
     _sgram[i]->setName(g_sgram_menu_strings[i ? 3 : 0]);
   }
@@ -210,7 +260,7 @@ bool /*success*/ Gui::openSgram(int i, CPoint* p)
   CContextRGBA* sgram_dc = _sgram[i]->getImage();
 
   // copy background image
-  Images::g_splash_bg->blend(
+  _images.splash_bg->blend(
       sgram_dc,                                                  // dest draw context
       TopLeft(_sgram[i]) - TopLeft(_sgram[i]->getDisplayRect()), // destination point
       splash_bg_rect,                                            // src rect
@@ -280,8 +330,16 @@ bool Gui::open(void* system_window)
                      blkFx()->FFTdata(i) // FFT data buffer
     );
 
+  // DtBlkFix: sliders pick up their images from here when they're created
+  for (i = 0; i < 2; i++) {
+    DtPopupHSlider::Images::g_bg[i] = _images.slider_bg[i];
+    DtPopupHSlider::Images::g_knob[i] = _images.slider_knob[i];
+  }
+
   // temporary bitmap for children to use as an offscreen buffer
-  _temp_bm.create(rect.right, max(Images::g_glob_bg->getHeight(), Images::g_fx_bg->getHeight()));
+  _temp_bm.create(rect.right,
+                  max(_images.glob_bg->getHeight(), _images.fx_bg->getHeight()),
+                  /*DtBlkFix: scale*/ _scale);
   if (!_temp_bm.ok())
     return false;
 
@@ -296,10 +354,10 @@ bool Gui::open(void* system_window)
 
   // place global controls
   NewView(_glob_ctrl, frame);
-  _glob_ctrl->init(/*gui*/ this, /*size*/ Offset(p, Images::g_glob_bg));
+  _glob_ctrl->init(/*gui*/ this, /*size*/ Offset(p, _images.glob_bg));
   if (!_glob_ctrl->ok())
     return false;
-  p.y += Images::g_glob_bg->getHeight();
+  p.y += _images.glob_bg->getHeight();
 
   // place spectrograms
   for (i = 0; i < 2; i++)
@@ -310,7 +368,7 @@ bool Gui::open(void* system_window)
   _sgram[1]->linkSgram(_sgram[0]);
 
   // create fx ctrls
-  CRect fx_rect = GetTile(Images::g_fx_bg, /*num x*/ 1, /*num y*/ 5);
+  CRect fx_rect = GetTile(_images.fx_bg, /*num x*/ 1, /*num y*/ 5);
   for (i = 0; i < BlkFxParam::NUM_FX_SETS; i++) {
     NewView(_fx_ctrl[i], frame);
     _fx_ctrl[i]->init(/*gui*/ this, /*size*/ Offset(p, fx_rect), i);
@@ -553,6 +611,19 @@ void Gui::valueChanged(CControl* ctrl)
 {
   if (!_ok)
     return;
+
+  // DtBlkFix: UI size & skin, the listener reopens us
+  if (_view_listener && (ctrl->getTag() == SIZE_MENU_ID || ctrl->getTag() == SKIN_MENU_ID)) {
+    int sel = (int)ctrl->getValue();
+    int scale_pct = RndToInt(_scale * 100.0f);
+    int skin_idx = _skin_idx;
+    if (ctrl->getTag() == SIZE_MENU_ID && idx_within(sel, _scales_pct))
+      scale_pct = _scales_pct[sel];
+    if (ctrl->getTag() == SKIN_MENU_ID && idx_within(sel, _skin_names))
+      skin_idx = sel;
+    _view_listener->guiViewChange(scale_pct, skin_idx);
+    return;
+  }
 
   // handle the results of spectrogram menus
   //

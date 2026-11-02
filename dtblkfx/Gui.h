@@ -51,6 +51,18 @@ GUI_GLOBAL_EXTERN VstGuiRef<CContextRGBA>
     g_fx_bg;
 };
 
+// DtBlkFix: the images that a Gui draws with (a skin, at the UI scale)
+struct GuiImages {
+  VstGuiRef<CContextRGBA> splash_bg, glob_bg, fx_bg;
+  Array<VstGuiRef<CContextRGBA>, 2> slider_bg, slider_knob; // index COARSE or FINE
+};
+
+// DtBlkFix: the UI size or skin was picked from a spectrogram menu
+class GuiViewListener {
+public:
+  virtual void guiViewChange(int scale_pct, int skin_idx) = 0;
+};
+
 //-----------------------------------------------------------------------------
 class Gui
     : public AEffGUIEditor
@@ -113,6 +125,29 @@ public: // internal stuff
 
   // true if gui is open ok
   bool _ok;
+
+public: // DtBlkFix: UI scale and skin
+  // set before open(): scale (1.0 = original size), images loaded for that scale, the skin names
+  // & scales to offer in the spectrogram menus and who to tell when one is picked
+  void setView(float scale, const GuiImages& images, const std::vector<std::string>& skin_names,
+               int skin_idx, const std::vector<int>& scales_pct, GuiViewListener* listener);
+
+  // override VSTGUIEditorInterface: frame & offscreen bitmaps are scaled by this
+  virtual float getScale() const { return _scale; }
+
+  // window size in pixels
+  int getScaledWidth() const { return (int)(rect.right * _scale + 0.5f); }
+  int getScaledHeight() const { return (int)(rect.bottom * _scale + 0.5f); }
+
+  GuiImages _images;
+  float _scale;
+  std::vector<std::string> _skin_names;
+  int _skin_idx;
+  std::vector<int> _scales_pct;
+  GuiViewListener* _view_listener;
+
+  // Size & Skin submenus of the spectrogram menus
+  Array<VstGuiRef<COptionMenu>, 2> _size_menu, _skin_menu;
 };
 
 #endif

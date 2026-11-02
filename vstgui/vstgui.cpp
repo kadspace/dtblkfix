@@ -643,6 +643,17 @@ CDrawContext::CDrawContext (CFrame* inFrame, void* inSystemContext, void* inWind
 		offsetScreen.v = rctTempWnd.top;
 	}
 
+	// DtBlkFix: frame scaled by the UI scale, screen position in view units
+	if (pFrame && pWindow && pSystemContext && pFrame->getScale () != 1.f)
+	{
+		float scale = pFrame->getScale ();
+		XFORM xf = {scale, 0.f, 0.f, scale, 0.f, 0.f};
+		SetGraphicsMode ((HDC)pSystemContext, GM_ADVANCED);
+		SetWorldTransform ((HDC)pSystemContext, &xf);
+		offsetScreen.h = (CCoord)floor (offsetScreen.h / scale + 0.5f);
+		offsetScreen.v = (CCoord)floor (offsetScreen.v / scale + 0.5f);
+	}
+
 #elif MAC
 	#if QUARTZ
 	if (pFrame && (pSystemContext || pWindow))
@@ -1020,6 +1031,7 @@ void CDrawContext::setClipRect (const CRect &clip)
 		pGraphics->SetClip (Gdiplus::Rect (clipRect.left, clipRect.top, clipRect.getWidth (), clipRect.getHeight ()), Gdiplus::CombineModeReplace);
 	#else
 	RECT r = {clipRect.left, clipRect.top, clipRect.right, clipRect.bottom};
+	LPtoDP ((HDC)pSystemContext, (POINT*)&r, 2); // DtBlkFix: regions are in pixels
 	HRGN hRgn  = CreateRectRgn (r.left, r.top, r.right, r.bottom);
 	SelectClipRgn ((HDC)pSystemContext, hRgn);
 	DeleteObject (hRgn);
@@ -2782,6 +2794,10 @@ void CDrawContext::getMouseLocation (CPoint &point)
 	GetCursorPos (&where);
 	point (where.x, where.y);
 
+	// DtBlkFix: in view units (as offsetScreen) when the UI is scaled
+	if (pFrame && pFrame->getScale () != 1.f)
+		point ((CCoord)floor (where.x / pFrame->getScale () + 0.5f), (CCoord)floor (where.y / pFrame->getScale () + 0.5f));
+
 #elif MACX
 	#if 0 // QUARTZ // does not work sic!
 	Point where;
@@ -4309,9 +4325,10 @@ bool CFrame::initFrame (void* systemWin)
 #if WINDOWS
 
 	InitWindowClass ();
+	// DtBlkFix: window is the view size times the UI scale
 	pHwnd = CreateWindowEx (0, gClassName, "Window",
 			 WS_CHILD | WS_VISIBLE, 
-			 0, 0, size.width (), size.height (), 
+			 0, 0, (int)floor (size.width () * getScale () + 0.5f), (int)floor (size.height () * getScale () + 0.5f), 
 			 (HWND)pSystemWindow, NULL, GetInstance (), NULL);
 
 	SetWindowLongPtr ((HWND)pHwnd, GWLP_USERDATA, (LONG_PTR)this);
@@ -5123,6 +5140,9 @@ bool CFrame::getCurrentMouseLocation (CPoint &where) const
 		GetWindowRect (hwnd, &rctTempWnd);
 		where.offset (-rctTempWnd.left, -rctTempWnd.top);
 	}
+	// DtBlkFix: in view units when the UI is scaled
+	if (getScale () != 1.f)
+		where ((CCoord)floor (where.x / getScale ()), (CCoord)floor (where.y / getScale ()));
 	return true;
 	#elif MAC
 	// no up-to-date API call available for this, so use old QuickDraw
@@ -5481,6 +5501,13 @@ void CFrame::invalidRect (CRect rect)
 
 	#elif WINDOWS
 	RECT r = {rect.left, rect.top, rect.right, rect.bottom};
+	if (getScale () != 1.f) // DtBlkFix: in pixels
+	{
+		r.left = (LONG)floor (rect.left * getScale ());
+		r.top = (LONG)floor (rect.top * getScale ());
+		r.right = (LONG)ceil (rect.right * getScale ());
+		r.bottom = (LONG)ceil (rect.bottom * getScale ());
+	}
 	InvalidateRect ((HWND)pHwnd, &r, true);
 	#else
 	// not supported yet
@@ -8128,6 +8155,16 @@ void ExitWindowClass ()
 }
 
 //-----------------------------------------------------------------------------
+// DtBlkFix: mouse position in a message, in view units of the frame
+static VSTGUI::CPoint FrameMousePos (VSTGUI::CFrame* pFrame, LPARAM lParam)
+{
+	VSTGUI::CPoint where (((int)(short)LOWORD(lParam)), ((int)(short)HIWORD(lParam)));
+	float scale = pFrame->getScale ();
+	if (scale != 1.f)
+		where ((VSTGUI::CCoord)floor (where.x / scale), (VSTGUI::CCoord)floor (where.y / scale));
+	return where;
+}
+
 LONG_PTR WINAPI WindowProc (HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam)
 {
 	USING_NAMESPACE_VSTGUI
@@ -8153,6 +8190,8 @@ LONG_PTR WINAPI WindowProc (HWND hwnd, UINT message, WPARAM wParam, LPARAM lPara
 			RECT rctWnd;
 			GetWindowRect (hwnd, &rctWnd);
 			where.offset (-rctWnd.left, -rctWnd.top);
+			if (pFrame->getScale () != 1.f) // DtBlkFix: in view units
+				where ((CCoord)floor (where.x / pFrame->getScale ()), (CCoord)floor (where.y / pFrame->getScale ()));
 			pFrame->onWheel (where, (float)(zDelta / WHEEL_DELTA), buttons); // todo, check modifier
 		}
 		break;
@@ -8198,6 +8237,11 @@ LONG_PTR WINAPI WindowProc (HWND hwnd, UINT message, WPARAM wParam, LPARAM lPara
 				context = new VSTGUI_CDrawContext (pFrame, hdc, hwnd);
 			
 			CRect updateRect (ps.rcPaint.left, ps.rcPaint.top, ps.rcPaint.right, ps.rcPaint.bottom);
+
+			// DtBlkFix: in view units when the UI is scaled
+			float scale = pFrame->getScale ();
+			if (scale != 1.f)
+				updateRect ((CCoord)floor (ps.rcPaint.left / scale), (CCoord)floor (ps.rcPaint.top / scale), (CCoord)ceil (ps.rcPaint.right / scale), (CCoord)ceil (ps.rcPaint.bottom / scale));
 
 			#if 0
 			int len = GetRegionData (rgn, 0, NULL);
@@ -8323,7 +8367,7 @@ LONG_PTR WINAPI WindowProc (HWND hwnd, UINT message, WPARAM wParam, LPARAM lPara
 				buttons |= kShift;
 			if (doubleClick)
 				buttons |= kDoubleClick;
-			VSTGUI_CPoint where (((int)(short)LOWORD(lParam)), ((int)(short)HIWORD(lParam)));
+			VSTGUI_CPoint where = FrameMousePos (pFrame, lParam); // DtBlkFix: scaled
 			if (pFrame->onMouseDown (where, buttons) == kMouseEventHandled)
 				SetCapture ((HWND)pFrame->getSystemWindow ());
 			return 0;
@@ -8349,7 +8393,7 @@ LONG_PTR WINAPI WindowProc (HWND hwnd, UINT message, WPARAM wParam, LPARAM lPara
 				buttons |= kControl;
 			if (wParam & MK_SHIFT)
 				buttons |= kShift;
-			VSTGUI_CPoint where (((int)(short)LOWORD(lParam)), ((int)(short)HIWORD(lParam)));
+			VSTGUI_CPoint where = FrameMousePos (pFrame, lParam); // DtBlkFix: scaled
 			pFrame->onMouseMoved (where, buttons);
 			return 0;
 		}
@@ -8379,7 +8423,7 @@ LONG_PTR WINAPI WindowProc (HWND hwnd, UINT message, WPARAM wParam, LPARAM lPara
 				buttons |= kControl;
 			if (wParam & MK_SHIFT)
 				buttons |= kShift;
-			VSTGUI_CPoint where (((int)(short)LOWORD(lParam)), ((int)(short)HIWORD(lParam)));
+			VSTGUI_CPoint where = FrameMousePos (pFrame, lParam); // DtBlkFix: scaled
 			pFrame->onMouseUp (where, buttons);
 			ReleaseCapture ();
 			return 0;

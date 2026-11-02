@@ -497,6 +497,15 @@ bool /*true=ok*/ AlphaBlend(CDrawContext* dst_context,
 );
 
 //-------------------------------------------------------------------------------------------------
+// DtBlkFix: copy (rop != 0) or alpha blend (rop == 0) between two draw contexts, either of which
+// may be scaled by a GDI world transform. Rectangles are in each context's view units (after
+// offsets). Works in pixels, stretching with good filtering if the scales differ.
+bool /*true=ok*/ ScaledBlt(CDrawContext* dst_context, CRect dst_rect,
+                           const CDrawContext* src_context, CRect src_rect,
+                           unsigned long rop, // e.g. SRCCOPY, or 0 to alpha blend
+                           unsigned char overall_alpha = 255, bool src_alpha = true);
+
+//-------------------------------------------------------------------------------------------------
 // use font colour for outside and fill colour for inside, this is not an efficient version
 // can someone write a better one??
 void OutlineDrawString(CDrawContext* context,
@@ -664,7 +673,14 @@ public:
   virtual ~CContextRGBA();
 
   // normal create
-  void create(int width, int height);
+  // DtBlkFix: width & height are in view units, the bitmap is scale times that in pixels and
+  // drawing with GDI into it is scaled to match (direct pixel access below is in pixels)
+  void create(int width, int height, float scale = 1.0f);
+
+  // DtBlkFix: pixels per view unit, and size in pixels
+  float getScale() const { return _scale; }
+  long getPixelWidth() const { return _pix_width; }
+  long getPixelHeight() const { return _pix_height; }
 
   // create from a windows resource
   void createFromResourceBitmap(int resoure_bitmap_id);
@@ -737,15 +753,12 @@ public:
     dst_rect = Offset(dst_context->offset, dst_rect);
     src_point += /*CDrawContext::*/ offset;
 #ifdef _WIN32
-    BitBlt((HDC)dst_context->getSystemContext(),
-           dst_rect.left,
-           dst_rect.top,
-           dst_rect.width(),
-           dst_rect.height(),
-           (HDC)getSystemContext(),
-           src_point.x,
-           src_point.y,
-           invert_src ? NOTSRCCOPY : SRCCOPY);
+    // DtBlkFix: copy in pixels, either context may be scaled
+    ScaledBlt(dst_context,
+              dst_rect,
+              this,
+              MoveTo(src_point, dst_rect),
+              invert_src ? NOTSRCCOPY : SRCCOPY);
 #endif
   }
 
@@ -766,25 +779,33 @@ public:
   PtrRGBA data() { return _bitmap_data; }
 
   // return pointer to data with p(0,0) corresponding to top left hand corner (no bounds checking)
-  PtrRGBA data(int x, int y) { return _bitmap_data + x + (_height - 1 - y) * _width; }
+  // DtBlkFix: these are in pixels, which is the same as view units unless scaled
+  PtrRGBA data(int x, int y)
+  {
+    return PtrRGBA(_bitmap_data + x + (_pix_height - 1 - y) * _pix_width);
+  }
   PtrRGBA data(const CPoint& p) { return data(p.x, p.y); }
 
   // get data as 2d
-  Ptr2dRGBA get2d(int x, int y) { return Ptr2dRGBA(data(x, y), /*longs per line*/ -getWidth()); }
+  Ptr2dRGBA get2d(int x, int y) { return Ptr2dRGBA(data(x, y), /*longs per line*/ -_pix_width); }
   Ptr2dRGBA get2d(CPoint p) { return get2d(p.x, p.y); }
 
   // return pixel range for a line (row) (note, NO bounds checking)
-  RowRGBA getRow(int y) { return RowRGBA(data(/*x*/ 0, y), getWidth()); }
+  RowRGBA getRow(int y) { return RowRGBA(data(/*x*/ 0, y), _pix_width); }
 
   // return pixel range for a column (note, NO bounds checking)
   ColumnRGBA getColumn(int x)
   {
-    return ColumnRGBA(data(x, /*y*/ 0), /*longs per line*/ -getWidth(), getHeight());
+    return ColumnRGBA(data(x, /*y*/ 0), /*longs per line*/ -_pix_width, _pix_height);
   }
 
 protected:
   // bitmap width & height
   int _width, _height;
+
+  // DtBlkFix: pixels per view unit & size in pixels
+  float _scale;
+  int _pix_width, _pix_height;
 
   // windows stuff
   HBITMAP _hbm;
@@ -856,6 +877,9 @@ public:
 
   // windows handle
   HWND _wdw;
+
+  // DtBlkFix: UI scale of the parent frame (screen coords above are pixels / scale)
+  float _scale;
 };
 
 //-------------------------------------------------------------------------------------------------

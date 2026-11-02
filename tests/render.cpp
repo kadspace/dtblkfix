@@ -14,7 +14,8 @@
 int main(int argc, char** argv)
 {
   if (argc < 4) {
-    fprintf(stderr, "usage: %s <fftw dir> <presets.txt> <out> [--sync-off] [--host] [--buf n]\n",
+    fprintf(stderr,
+            "usage: %s <fftw dir> <presets.txt> <out> [--sync-off] [--host] [--buf n]\n",
             argv[0]);
     return 2;
   }

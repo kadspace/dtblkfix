@@ -51,6 +51,18 @@ bool /*true=ok*/ AlphaBlend(CDrawContext* dst_context,
   dst_rect = Offset(dst_context->offset, dst_rect);
   src_rect = Offset(src_context->offset, src_rect);
 
+  // DtBlkFix: in pixels, either context may be scaled
+  return ScaledBlt(
+      dst_context, dst_rect, src_context, src_rect, /*rop*/ 0, overall_alpha, src_alpha);
+}
+
+//-------------------------------------------------------------------------------------------------
+bool /*true=ok*/ ScaledBlt(CDrawContext* dst_context, CRect dst_rect,
+                           const CDrawContext* src_context, CRect src_rect, unsigned long rop,
+                           unsigned char overall_alpha, bool src_alpha)
+// DtBlkFix: copy or alpha blend in pixels between contexts that may have GDI world transforms
+// (UI scaling): find the pixel rectangles, drop the transforms for the blit and put them back
+{
   // get AlphaBlend out of vstgui.cpp
   extern BOOL(WINAPI * pfnAlphaBlend)(HDC hdcDest,                // handle to destination DC
                                       int nXOriginDest,           // x-coord of upper-left corner
@@ -64,28 +76,61 @@ bool /*true=ok*/ AlphaBlend(CDrawContext* dst_context,
                                       int nHeightSrc,             // source fheight
                                       BLENDFUNCTION blendFunction // alpha-blending function
   );
-  if (!pfnAlphaBlend)
+  HDC dst = (HDC)dst_context->getSystemContext();
+  HDC src = (HDC)src_context->getSystemContext();
+  if (!dst || !src)
     return false;
 
-  BLENDFUNCTION bf; // structure for alpha blending
-  bf.BlendOp = AC_SRC_OVER;
-  bf.BlendFlags = 0;
-  bf.AlphaFormat = src_alpha ? AC_SRC_ALPHA : 0;                // use source alpha
-  bf.SourceConstantAlpha = overall_alpha;                       // use constant alpha
-  return (*pfnAlphaBlend)((HDC)dst_context->getSystemContext(), // handle to destination DC
-                          dst_rect.left,                        // x-coord of upper-left corner
-                          dst_rect.top,                         // y-coord of upper-left corner
-                          dst_rect.width(),                     // destination wdith
-                          dst_rect.height(),                    // destination height
-                          (HDC)src_context->getSystemContext(), // handle to source DC
-                          src_rect.left,                        // x-coord of upper-left corner
-                          src_rect.top,                         // y-coord of upper-left corner
-                          src_rect.width(),                     // source fwdith
-                          src_rect.height(),                    // source fheight
-                          bf                                    // alpha-blending function
-                          )
-             ? true
-             : false;
+  // pixel rectangles
+  POINT d[2] = {{dst_rect.left, dst_rect.top}, {dst_rect.right, dst_rect.bottom}};
+  POINT s[2] = {{src_rect.left, src_rect.top}, {src_rect.right, src_rect.bottom}};
+  LPtoDP(dst, d, 2);
+  LPtoDP(src, s, 2);
+
+  // blit without transforms
+  XFORM dst_xf, src_xf;
+  bool dst_adv = GetGraphicsMode(dst) == GM_ADVANCED, src_adv = GetGraphicsMode(src) == GM_ADVANCED;
+  if (dst_adv) {
+    GetWorldTransform(dst, &dst_xf);
+    ModifyWorldTransform(dst, NULL, MWT_IDENTITY);
+  }
+  if (src_adv && src != dst) {
+    GetWorldTransform(src, &src_xf);
+    ModifyWorldTransform(src, NULL, MWT_IDENTITY);
+  }
+
+  int dw = d[1].x - d[0].x, dh = d[1].y - d[0].y;
+  int sw = s[1].x - s[0].x, sh = s[1].y - s[0].y;
+  bool stretch = dw != sw || dh != sh;
+  BOOL ok = FALSE;
+
+  if (rop) {
+    if (stretch) {
+      int prv_mode = SetStretchBltMode(dst, HALFTONE);
+      POINT prv_org;
+      SetBrushOrgEx(dst, 0, 0, &prv_org);
+      ok = StretchBlt(dst, d[0].x, d[0].y, dw, dh, src, s[0].x, s[0].y, sw, sh, rop);
+      SetStretchBltMode(dst, prv_mode);
+      SetBrushOrgEx(dst, prv_org.x, prv_org.y, NULL);
+    }
+    else
+      ok = BitBlt(dst, d[0].x, d[0].y, dw, dh, src, s[0].x, s[0].y, rop);
+  }
+  else if (pfnAlphaBlend) {
+    BLENDFUNCTION bf; // structure for alpha blending
+    bf.BlendOp = AC_SRC_OVER;
+    bf.BlendFlags = 0;
+    bf.AlphaFormat = src_alpha ? AC_SRC_ALPHA : 0; // use source alpha
+    bf.SourceConstantAlpha = overall_alpha;        // use constant alpha
+    ok = (*pfnAlphaBlend)(dst, d[0].x, d[0].y, dw, dh, src, s[0].x, s[0].y, sw, sh, bf);
+  }
+
+  if (dst_adv)
+    SetWorldTransform(dst, &dst_xf);
+  if (src_adv && src != dst)
+    SetWorldTransform(src, &src_xf);
+
+  return ok ? true : false;
 }
 
 //-------------------------------------------------------------------------------------------------
@@ -124,6 +169,13 @@ void OffsetDrawContext(CDrawContext* dc, CView* view)
   dc->offsetScreen.x = frame_rect.left;
   dc->offsetScreen.y = frame_rect.top;
 
+  // DtBlkFix: screen position in view units when the UI is scaled
+  float scale = view->getFrame()->getScale();
+  if (scale != 1.0f) {
+    dc->offsetScreen.x = RndToInt(frame_rect.left / scale);
+    dc->offsetScreen.y = RndToInt(frame_rect.top / scale);
+  }
+
   // convert to frame coords, make sure we use the CView conversion since it gives us the
   // result in parent coords (which is what VSTGUI calls local coords)
   CPoint p(0, 0);
@@ -151,6 +203,9 @@ CContextRGBA::CContextRGBA(int width, // pixels (default 0)
 {
   _hbm = NULL;
   _hbm_prev = NULL;
+  _width = _height = 0;
+  _scale = 1.0f;
+  _pix_width = _pix_height = 0;
 
   HDC wnd_dc = GetDC(NULL);
   if (!wnd_dc)
@@ -188,7 +243,7 @@ void CContextRGBA::cleanup()
 }
 
 //-------------------------------------------------------------------------------------------------
-void CContextRGBA::create(int width, int height)
+void CContextRGBA::create(int width, int height, float scale)
 // create an RGB+alpha bitmap
 // expect pSystemContext to have been filled in
 {
@@ -200,13 +255,25 @@ void CContextRGBA::create(int width, int height)
   _width = width;
   _height = height;
 
+  // DtBlkFix: bitmap is "scale" pixels per view unit & GDI drawing is scaled to match
+  _scale = scale;
+  _pix_width = scale == 1.0f ? width : RndToInt(width * scale);
+  _pix_height = scale == 1.0f ? height : RndToInt(height * scale);
+  if (scale != 1.0f) {
+    XFORM xf = {scale, 0.0f, 0.0f, scale, 0.0f, 0.0f};
+    SetGraphicsMode((HDC)pSystemContext, GM_ADVANCED);
+    SetWorldTransform((HDC)pSystemContext, &xf);
+  }
+  else if (GetGraphicsMode((HDC)pSystemContext) == GM_ADVANCED)
+    ModifyWorldTransform((HDC)pSystemContext, NULL, MWT_IDENTITY);
+
   /*CDrawContext::*/ clipRect = CRect(0, 0, width, height);
 
   BITMAPV5HEADER bm_info;
   memset(&bm_info, 0, sizeof(bm_info));
   bm_info.bV5Size = sizeof(BITMAPV5HEADER);
-  bm_info.bV5Width = width;
-  bm_info.bV5Height = height;
+  bm_info.bV5Width = _pix_width;
+  bm_info.bV5Height = _pix_height;
   bm_info.bV5Planes = 1;
   bm_info.bV5BitCount = 32;
   bm_info.bV5Compression = BI_BITFIELDS;
@@ -564,6 +631,7 @@ void DtHSlider::setValue(float /*0..1*/ v, bool send_to_listener)
 DtPopupWdw::DtPopupWdw()
 {
   _wdw = NULL;
+  _scale = 1.0f;
 }
 
 //-------------------------------------------------------------------------------------------------
@@ -590,6 +658,9 @@ bool DtPopupWdw::create(CFrame* parent_frame)
   close();
 
   CharArray<32> msw_class_name;
+
+  // DtBlkFix: screen positions are in view units of the frame
+  _scale = parent_frame->getScale();
 
   // get microsoft windows class name from the frame
   HWND msw_parent = (HWND)parent_frame->getSystemWindow();
@@ -650,6 +721,16 @@ void DtPopupWdw::update(CastCRect sz,               // screen position & size of
   POINT msw_top_left = {sz.x, sz.y};
   SIZE msw_wdw_sz = {sz.getWidth(), sz.getHeight()};
 
+  // DtBlkFix: in pixels when scaled
+  if (_scale != 1.0f || bm->getScale() != 1.0f) {
+    msw_src_pos.x = RndToInt(bm_offs.x * bm->getScale());
+    msw_src_pos.y = RndToInt(bm_offs.y * bm->getScale());
+    msw_top_left.x = RndToInt(sz.x * _scale);
+    msw_top_left.y = RndToInt(sz.y * _scale);
+    msw_wdw_sz.cx = RndToInt(sz.getWidth() * bm->getScale());
+    msw_wdw_sz.cy = RndToInt(sz.getHeight() * bm->getScale());
+  }
+
   // perform the alpha blend
   UpdateLayeredWindow(_wdw,                        // window to update
                       NULL,                        // screen device context (for palette matching)
@@ -669,6 +750,19 @@ void DtPopupWdw::move(CPoint top_left // top-left screen position
   _size = MoveTo(top_left, _size);
   if (!_wdw)
     return;
+
+  // DtBlkFix: in pixels when scaled
+  if (_scale != 1.0f) {
+    RECT r;
+    GetWindowRect(_wdw, &r);
+    MoveWindow(_wdw,
+               RndToInt(top_left.x * _scale),
+               RndToInt(top_left.y * _scale),
+               r.right - r.left,
+               r.bottom - r.top,
+               /*repaint*/ false);
+    return;
+  }
 
   MoveWindow(_wdw, top_left.x, top_left.y, _size.getWidth(), _size.getHeight(), /*repaint*/ false);
 }
@@ -1238,6 +1332,11 @@ CMouseEventResult DtPopupHSlider::sliderMouseClick(CPoint mouse, long buttons)
   POINT pt = {0, 0};
   ClientToScreen((HWND)getFrame()->getSystemWindow(), &pt);
   _wdw_screen_offs = _wdw_frame_offs + CPoint(pt.x, pt.y);
+
+  // DtBlkFix: screen position in view units when the UI is scaled
+  float scale = getFrame()->getScale();
+  if (scale != 1.0f)
+    _wdw_screen_offs = _wdw_frame_offs + CPoint(RndToInt(pt.x / scale), RndToInt(pt.y / scale));
 
   // assume 2 pixel border around images
   enum { IMAGE_BORDER = 2 };

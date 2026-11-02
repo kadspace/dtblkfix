@@ -552,13 +552,18 @@ void Spectrogram::update(CDrawContext* context)
   // work out scroll region in frame coords
   CRect frame_scroll = MoveTo(frame_topleft, _display_rect);
 
-  // scroll the window
-  RECT r = {frame_scroll.left, frame_scroll.top, frame_scroll.right, frame_scroll.bottom};
-  HWND wnd = (HWND)(/*CView::*/ getFrame()->getSystemWindow());
-  ScrollWindow(wnd, 0, -scroll_n, /*scroll rect*/ &r, /*clip rect*/ &r);
+  // DtBlkFix: when the UI is scaled a scroll isn't a whole number of pixels, redraw instead
+  if (getFrame()->getScale() != 1.0f)
+    drawBm(context, _display_rect);
+  else {
+    // scroll the window
+    RECT r = {frame_scroll.left, frame_scroll.top, frame_scroll.right, frame_scroll.bottom};
+    HWND wnd = (HWND)(/*CView::*/ getFrame()->getSystemWindow());
+    ScrollWindow(wnd, 0, -scroll_n, /*scroll rect*/ &r, /*clip rect*/ &r);
 
-  // force repaint of missing part synchronously
-  UpdateWindow(wnd);
+    // force repaint of missing part synchronously
+    UpdateWindow(wnd);
+  }
 
   // force redraw of overlay
   _info_hz[0] = -1;

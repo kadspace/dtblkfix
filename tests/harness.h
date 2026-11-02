@@ -132,7 +132,7 @@ struct Transport : public AudioEffectHost {
       long st;
       segAt(starts[i], t, p, st);
       double spb = 60.0 * sample_rate / t;
-      for (double k = ceil(p); ; k += 1.0) {
+      for (double k = ceil(p);; k += 1.0) {
         long b = (long)floor(st + (k - p) * spb + 0.5);
         if (b >= starts[i + 1])
           break;
@@ -163,8 +163,8 @@ struct Transport : public AudioEffectHost {
     ti.samplePos = ppq * 60.0 * sample_rate / ti.tempo;
     ti.timeSigNumerator = 4;
     ti.timeSigDenominator = 4;
-    ti.flags = kVstTempoValid | kVstPpqPosValid | kVstTimeSigValid |
-               (playing ? kVstTransportPlaying : 0);
+    ti.flags =
+        kVstTempoValid | kVstPpqPosValid | kVstTimeSigValid | (playing ? kVstTransportPlaying : 0);
     return &ti;
   }
 };
@@ -190,8 +190,8 @@ struct Signal {
     double s = 0;
     for (int h = 1; h <= 12; h++)
       s += sin(TWO_PI * f0 * h * t + h) / h;
-    double chord = sin(TWO_PI * 261.63 * t) + sin(TWO_PI * 329.63 * t + 1) +
-                   sin(TWO_PI * 392.0 * t + 2);
+    double chord =
+        sin(TWO_PI * 261.63 * t) + sin(TWO_PI * 329.63 * t + 1) + sin(TWO_PI * 392.0 * t + 2);
     long n = (long)(t * sr + 0.5);
     double click = (n % 11025) < 20 ? 0.8 : 0.0;
     l = (float)(0.25 * s + 0.1 * chord + click + 0.03 * noise());

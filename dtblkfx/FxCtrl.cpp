@@ -232,7 +232,8 @@ void FxCtrl::drawRect(CDrawContext* context, const CRect& update_rect)
 
   // background image is made from 5 horizontal tiles
   // 0=inactive bg, 1=row selected bg, 2=control selected bg, 3=amp bg, 4=freq bg
-  CRect bg_img_rect = GetTile(Images::g_fx_bg, /*num x*/ 1, /*num y*/ 5, /*idx x*/ 0, /*idx y*/ 0);
+  CRect bg_img_rect =
+      GetTile(_gui->_images.fx_bg, /*num x*/ 1, /*num y*/ 5, /*idx x*/ 0, /*idx y*/ 0);
   CRect bg_inactive_r = TileOffset(bg_img_rect, /*x*/ 0, /*y*/ 0);
   CRect bg_row_focus_r = TileOffset(bg_img_rect, /*x*/ 0, /*y*/ 1);
   CRect bg_ctrl_focus_r = TileOffset(bg_img_rect, /*x*/ 0, /*y*/ 2);
@@ -260,19 +261,19 @@ void FxCtrl::drawRect(CDrawContext* context, const CRect& update_rect)
 
     // blend
     for (i = 0; i < 3; i++)
-      Images::g_fx_bg->blend(/*dest*/ temp_bm,
-                             dst_r[i],
-                             src_p[i] + TopLeft(dst_r[i]),
-                             /*alpha*/ 255,
-                             /*use src alpha*/ false);
+      _gui->_images.fx_bg->blend(/*dest*/ temp_bm,
+                                 dst_r[i],
+                                 src_p[i] + TopLeft(dst_r[i]),
+                                 /*alpha*/ 255,
+                                 /*use src alpha*/ false);
   }
   else {
     // row not selected
-    Images::g_fx_bg->blend(/*dest*/ temp_bm,
-                           /*dest*/ CPoint(0, 0),
-                           /*src rect*/ bg_inactive_r,
-                           /*alpha*/ 255,
-                           /*use src alpha*/ false);
+    _gui->_images.fx_bg->blend(/*dest*/ temp_bm,
+                               /*dest*/ CPoint(0, 0),
+                               /*src rect*/ bg_inactive_r,
+                               /*alpha*/ 255,
+                               /*use src alpha*/ false);
   }
 
   // for mask effects, remove the 1 pixel high separating line at the bottom by copying the second
@@ -284,7 +285,8 @@ void FxCtrl::drawRect(CDrawContext* context, const CRect& update_rect)
     // 1 before bottom line of inactive bg
     CPoint src_p(0, dst_r.top - 1);
     //
-    Images::g_fx_bg->blend(/*dest*/ temp_bm, dst_r, src_p, /*alpha*/ 255, /*use src alpha*/ false);
+    _gui->_images.fx_bg->blend(
+        /*dest*/ temp_bm, dst_r, src_p, /*alpha*/ 255, /*use src alpha*/ false);
   }
 
   // copy on the amp overlay
@@ -295,7 +297,7 @@ void FxCtrl::drawRect(CDrawContext* context, const CRect& update_rect)
     amp_alpha = 63;
   else if (_amp->getState() == _amp->INACTIVE)
     amp_alpha = 127;
-  Images::g_fx_bg->blend(
+  _gui->_images.fx_bg->blend(
       /*dst contect*/ temp_bm, /*dest*/ CPoint(amp_r.left, 0), /*src*/ amp_r, /*alpha*/ amp_alpha);
 
   //
@@ -325,18 +327,18 @@ void FxCtrl::drawRect(CDrawContext* context, const CRect& update_rect)
     CRect r = freq_scale_r;
     r.left = freq_pos[0];
     r.right = freq_pos[1];
-    Images::g_fx_bg->blend(
+    _gui->_images.fx_bg->blend(
         /*dst*/ temp_bm, /*dst*/ CPoint(r.left, 0), /*src rect*/ r, /*alpha*/ freq_alpha);
   }
   else {
     // draw outside freqs (exclude range)
     CRect r = freq_scale_r;
     r.right = freq_pos[1];
-    Images::g_fx_bg->blend(
+    _gui->_images.fx_bg->blend(
         /*dst*/ temp_bm, /*dst*/ CPoint(r.left, 0), /*src rect*/ r, /*alpha*/ freq_alpha);
     r = freq_scale_r;
     r.left = freq_pos[0];
-    Images::g_fx_bg->blend(
+    _gui->_images.fx_bg->blend(
         /*dst*/ temp_bm, /*dst*/ CPoint(r.left, 0), /*src rect*/ r, /*alpha*/ freq_alpha);
   }
 

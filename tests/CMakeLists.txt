@@ -12,6 +12,9 @@ dtblkfix_test_exe(dtblkfix_render dtblkfix_engine render.cpp)
 dtblkfix_test_exe(dtblkfix_sync_test dtblkfix_engine sync_test.cpp)
 add_executable(dtblkfix_compare compare.cpp)
 
+# screenshots of the editor (not run as a test, it needs a desktop)
+dtblkfix_test_exe(dtblkfix_gui_snapshot dtblkfix_engine gui_snapshot.cpp)
+
 if(DTBLKFIX_FFTW_DIR)
   add_test(NAME sync COMMAND dtblkfix_sync_test ${DTBLKFIX_FFTW_DIR} ${presets})
 endif()

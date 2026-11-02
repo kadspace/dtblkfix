@@ -120,8 +120,11 @@ int main(int argc, char** argv)
           differ++;
       }
       char what[256];
-      snprintf(what, sizeof(what), "Sync on, %s, preset %d: identical at buffer sizes 32-4096",
-               cases[ci].name, presets[pi]);
+      snprintf(what,
+               sizeof(what),
+               "Sync on, %s, preset %d: identical at buffer sizes 32-4096",
+               cases[ci].name,
+               presets[pi]);
       check(differ == 0, what);
     }
   }
@@ -142,7 +145,7 @@ int main(int argc, char** argv)
     else {
       // stopped: the grid keeps running from where the transport stands
       double spb = 60.0 * 44100.0 / t.tempo;
-      for (double k = ceil(t.ppq_start); ; k++) {
+      for (double k = ceil(t.ppq_start);; k++) {
         long b = (long)floor((k - t.ppq_start) * spb + 0.5);
         if (b >= n - 8192)
           break;
@@ -158,7 +161,10 @@ int main(int argc, char** argv)
         missed++;
       }
     char what[256];
-    snprintf(what, sizeof(what), "Sync on, %s: a block starts on all %d beats", cases[ci].name,
+    snprintf(what,
+             sizeof(what),
+             "Sync on, %s: a block starts on all %d beats",
+             cases[ci].name,
              (int)beats.size());
     check(missed == 0 && !beats.empty(), what);
   }
@@ -187,11 +193,15 @@ int main(int argc, char** argv)
         if (fabsf(out_l[i]) > fabsf(out_l[peak]))
           peak = i;
       char what[256];
-      snprintf(what, sizeof(what),
+      snprintf(what,
+               sizeof(what),
                "Sync %s, %5d sample blocks: latency %ld, measured delay %ld (peak %.3f)",
-               sync ? "on " : "off", g_fft_sz[plans[pi]], latency, peak - at, out_l[peak]);
-      check(peak - at == latency && latency == g_fft_sz[plans[pi]] && out_l[peak] > 0.5f,
-            what);
+               sync ? "on " : "off",
+               g_fft_sz[plans[pi]],
+               latency,
+               peak - at,
+               out_l[peak]);
+      check(peak - at == latency && latency == g_fft_sz[plans[pi]] && out_l[peak] > 0.5f, what);
     }
   }
 

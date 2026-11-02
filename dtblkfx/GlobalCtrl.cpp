@@ -170,11 +170,11 @@ void GlobalCtrl::drawRect(CDrawContext* context, const CRect& update_rect_)
   temp_bm->setClipRect(rel_update_rect);
 
   // copy background bitmap into our offscreen
-  Images::g_glob_bg->blend(temp_bm,         // destination
-                           rel_update_rect, // dest point
-                           rel_update_rect, // source rectangle
-                           255,             // overall alpha
-                           false            // use source alpha
+  _gui->_images.glob_bg->blend(temp_bm,         // destination
+                               rel_update_rect, // dest point
+                               rel_update_rect, // source rectangle
+                               255,             // overall alpha
+                               false            // use source alpha
   );
 
   // draw text into bitmap

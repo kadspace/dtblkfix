@@ -96,8 +96,8 @@ struct AEffect {
 };
 
 // host callback type; DtBlkFxMain.cpp only uses it to ask for the host version
-typedef VstIntPtr (*audioMasterCallback)(
-    AEffect* effect, VstInt32 opcode, VstInt32 index, VstIntPtr value, void* ptr, float opt);
+typedef VstIntPtr (*audioMasterCallback)(AEffect* effect, VstInt32 opcode, VstInt32 index,
+                                         VstIntPtr value, void* ptr, float opt);
 enum { audioMasterVersion = 1 };
 
 //-------------------------------------------------------------------------------------------------

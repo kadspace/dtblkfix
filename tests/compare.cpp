@@ -79,13 +79,21 @@ int main(int argc, char** argv)
         if (d > 0 && !first)
           first = j + 1;
       }
-      printf("%2d %-24s sync=%d %s (max diff %g, first at sample %d)\n", (int)i, a[i].name,
-             a[i].sync, result, max_diff, (int)((first - 1) % (a[i].data.size() / 2)));
+      printf("%2d %-24s sync=%d %s (max diff %g, first at sample %d)\n",
+             (int)i,
+             a[i].name,
+             a[i].sync,
+             result,
+             max_diff,
+             (int)((first - 1) % (a[i].data.size() / 2)));
     }
     else
       printf("%2d %-24s sync=%d %s\n", (int)i, a[i].name, a[i].sync, result);
   }
-  printf("%d presets: %d identical, %d differ with Sync on, %d failed\n", (int)a.size(),
-         identical, sync_diff, failed);
+  printf("%d presets: %d identical, %d differ with Sync on, %d failed\n",
+         (int)a.size(),
+         identical,
+         sync_diff,
+         failed);
   return failed ? 1 : 0;
 }
