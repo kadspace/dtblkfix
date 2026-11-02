@@ -2,15 +2,19 @@ name: build
 
 on:
   push:
+    branches: ["**"]
   pull_request:
   workflow_dispatch:
   workflow_call:
+
+permissions:
+  contents: read
 
 env:
   JUCE_TAG: "8.0.15"
   FFTW_URL: "https://fftw.org/pub/fftw/fftw-3.3.5-dll64.zip"
   FFTW_SHA256: "cfd88dc0e8d7001115ea79e069a2c695d52c8947f5b4f3b7ac54a192756f439f"
-  # the original engine the renders are compared against (DtBlkFx with the latency fix, as on main)
+  # the original engine that renders are compared against (DtBlkFx with the latency fix)
   REFERENCE_COMMIT: "ab3dba73c7a7a424b8e6309a2c0a76a696504a62"
 
 jobs:
@@ -21,7 +25,14 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: FFTW
+      - name: Version
+        shell: bash
+        run: |
+          version=$(sed -n 's/^project(DtBlkFix VERSION \([0-9.]*\).*/\1/p' CMakeLists.txt)
+          echo "VERSION=$version" >> "$GITHUB_ENV"
+          echo "DtBlkFix $version"
+
+      - name: FFTW (official Windows DLLs, checksum checked)
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force build\fftw | Out-Null
@@ -29,6 +40,7 @@ jobs:
           $hash = (Get-FileHash build\fftw.zip -Algorithm SHA256).Hash.ToLower()
           if ($hash -ne $env:FFTW_SHA256) { throw "FFTW zip checksum mismatch: $hash" }
           Expand-Archive build\fftw.zip -DestinationPath build\fftw -Force
+          Get-FileHash build\fftw\libfftw3f-3.dll -Algorithm SHA256
 
       - name: Original engine for the comparison tests
         shell: bash
@@ -53,3 +65,61 @@ jobs:
 
       - name: Test
         run: ctest --test-dir build/cmake -C Release --output-on-failure -j 2
+
+      - name: Test results
+        if: always()
+        shell: bash
+        run: |
+          for f in build/cmake/Testing/Temporary/LastTest*.log; do
+            [ -f "$f" ] && grep -E "^(ok  |FAIL|[ 0-9]+ .*(identical|DIFFERS|differs)|[0-9]+ presets:|all passed|FAILED)" "$f" || true
+          done
+
+      - name: Package
+        shell: pwsh
+        run: >
+          ./packaging/package.ps1 -Build build/cmake -Juce build/JUCE -Out build/package
+          -Version $env:VERSION
+
+      - name: Installer
+        shell: pwsh
+        run: |
+          $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+          if (-not (Test-Path $iscc)) {
+            choco install innosetup -y --no-progress
+          }
+          & $iscc /DVersion=$env:VERSION "/DSource=$PWD\build\package\DtBlkFix-$env:VERSION-win64" "/DOutDir=$PWD\build\package" packaging\DtBlkFix.iss
+          if ($LASTEXITCODE -ne 0) { throw "iscc failed" }
+
+      - name: Screenshots of the editor
+        continue-on-error: true
+        shell: pwsh
+        run: |
+          $exe = "build\cmake\tests\Release\dtblkfix_gui_snapshot.exe"
+          New-Item -ItemType Directory -Force build\screenshots | Out-Null
+          $dir = "build\cmake\plugin\DtBlkFix_artefacts\Release\Standalone"
+          Copy-Item $exe $dir
+          foreach ($scale in "0.75", "1", "1.25", "1.5", "2") {
+            foreach ($skin in "", "Dark", "Warm") {
+              $name = if ($skin) { $skin } else { "Original" }
+              $a = @("$PWD\$dir", "$PWD\build\screenshots\dtblkfix-$name-$scale.png", "--scale", $scale)
+              if ($skin) { $a += @("--skin", "$PWD\$dir\dtblkfx\skins\$skin") }
+              & "$dir\dtblkfix_gui_snapshot.exe" @a
+            }
+          }
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: DtBlkFix-${{ env.VERSION }}-win64
+          path: build/package/DtBlkFix-${{ env.VERSION }}-win64.zip
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: DtBlkFix-${{ env.VERSION }}-setup
+          path: build/package/DtBlkFix-${{ env.VERSION }}-setup.exe
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: screenshots
+          path: build/screenshots
+          if-no-files-found: ignore
