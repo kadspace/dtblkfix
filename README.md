@@ -6,24 +6,43 @@ DtBlkFx is Darrell Tam's FFT effect from 2005–2006: up to eight spectral effec
 
 ## Fixed
 
-- **Timing.** DtBlkFx delayed its output by one block but told the host its latency was zero, so at the default settings everything came out a beat late. DtBlkFix reports the delay, and the host compensates for it. Apart from that, the audio is bit-identical to the original.
+- **Timing.** DtBlkFx delayed its output by one block but told the host its latency was zero, so at the default settings everything came out a beat late. DtBlkFix reports the delay, and the host compensates for it.
+- **Song sync.** With Sync on, DtBlkFx checked the song position about once a beat, so after a loop, a jump or a tempo change the blocks drifted off the beat, and where they landed depended on the host's buffer size. DtBlkFix follows the song position on every buffer: a block starts on every beat, right after a loop or jump, at any buffer size.
+- **Window size.** The original is a fixed 410 by 409 pixel window, which is tiny on a modern screen. DtBlkFix scales it to 75, 100, 125, 150 or 200%. Text and lines are drawn at the new size, so it stays sharp.
+- **Skins.** The original look, plus Dark and Warm. A skin is just the folder of images the plugin already loads, so you can make your own.
+- **Formats.** DtBlkFix is a 64-bit VST3 and a standalone app, with a Windows installer.
 
-## Planned
+Apart from Sync, the audio is bit-identical to the original. That's the whole list. There are no new effects or controls.
 
-- **Song sync.** Blocks will follow the host's song position on every buffer, so they stay on the beat through loops, jumps and tempo changes.
-- **Resizable window.** The original is a fixed 2006-sized window, which is tiny on a modern screen.
-- **Skins.** The original look plus a dark one. A skin is just the folder of PNGs the plugin already loads.
-- **VST3 and a Windows installer**, built by CI.
+## Installing
 
-That's the whole list. There are no new effects or controls.
+Windows 10 or later, 64-bit.
+
+Run `DtBlkFix-1.0.0-setup.exe`. It puts the VST3 in `C:\Program Files\Common Files\VST3` and the standalone app in `C:\Program Files\DtBlkFix`.
+
+Or use the zip: copy `DtBlkFix.vst3` to `C:\Program Files\Common Files\VST3`. Everything the plugin needs is inside it. The standalone app is in `Standalone`; keep `DtBlkFix.exe` next to its `dtblkfx` folder.
+
+DtBlkFix has its own plugin ID, so it installs next to the original DtBlkFx and doesn't replace it. It has the same presets and saves its settings in the same format.
+
+## Size and skin
+
+Click a spectrogram. Below the Input/Output choices are **Size** and **Skin**. Both are saved with the plugin's state.
+
+To make a skin, copy the `stereo_*.png` files from `DtBlkFix.vst3\Contents\Resources\dtblkfx` into a new folder in `dtblkfx\skins`, keep their sizes, and edit them. The folder's name is the skin's name. The Dark and Warm skins are made from the originals by [`tools/make_skins.py`](tools/make_skins.py).
 
 ## Building
 
-Windows only for now. You need Visual Studio 2022 and the Steinberg VST2 SDK, which isn't included because it isn't redistributable. Copy its `pluginterfaces/` and `public.sdk/` folders into `vstsdk/`, then open `projects/DTBlkFx.sln` or run `build_fork.bat`.
+You need Windows, Visual Studio 2022, CMake 3.22 or later, Python 3, a [JUCE 8](https://github.com/juce-framework/JUCE) checkout and the [64-bit FFTW 3.3.5 DLLs](https://www.fftw.org/install/windows.html).
 
-At runtime the plugin loads `libfftw3f-3.dll` ([FFTW 3](https://www.fftw.org/), single precision). It loads its images and `presets.txt` from a `dtblkfx` folder next to the DLL; copy `resources/stereo_*` there.
+```
+cmake -S . -B build -A x64 -DDTBLKFIX_JUCE_DIR=<JUCE> -DDTBLKFIX_FFTW_DIR=<folder with libfftw3f-3.dll>
+cmake --build build --config Release
+ctest --test-dir build -C Release
+```
 
-DtBlkFix has its own plugin ID, so it installs next to the original DtBlkFx and doesn't replace it.
+The VST3 and the standalone app end up in `build/plugin/DtBlkFix_artefacts/Release`. The comparison against the original engine runs when `DTBLKFIX_REFERENCE_DIR` points to a checkout of it; [`.github/workflows/build.yml`](.github/workflows/build.yml) shows how CI does it, packaging included.
+
+The plugin doesn't need the Steinberg VST2 SDK: `shim/` stands in for the few parts of it that the engine uses. If you have the SDK, `projects/DTBlkFx.sln` still builds the VST2: copy its `pluginterfaces/` and `public.sdk/` folders into `vstsdk/`, then open the solution or run `build_fork.bat`.
 
 ## Credits
 
@@ -31,4 +50,4 @@ DtBlkFx was written by Darrell Tam. This repo starts from the [dozius fork](http
 
 ## License
 
-GPLv3, see [`LICENSE`](LICENSE). Bundled third-party code and its licenses are listed in [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md).
+GPLv3, see [`LICENSE`](LICENSE). The plugin binaries are built with JUCE 8 under the AGPLv3. Bundled third-party code and its licenses are listed in [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md).
