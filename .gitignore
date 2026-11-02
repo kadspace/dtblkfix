@@ -342,3 +342,6 @@ healthchecksdb
 
 # Backup folder for Package Reference Convert tool in Visual Studio 2017
 MigrationBackup/
+
+# Steinberg VST2 SDK (not redistributable, copy it in to build)
+vstsdk/
