@@ -186,6 +186,9 @@ public: // DtBlkFix: only the effects in use get a row, with "+" to add one and 
   // override AEffGUIEditor: size depends on the rows
   virtual bool getRect(ERect** rect);
 
+  // height of the global controls: the image plus room between the labels and the values
+  int globHeight() { return _images.glob_bg->getHeight() + 10; }
+
   // effect slots shown, in order
   std::vector<int> _rows;
   VstGuiRef<FxAddRow> _add_row;

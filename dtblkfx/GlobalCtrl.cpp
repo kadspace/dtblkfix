@@ -185,7 +185,7 @@ void GlobalCtrl::drawRect(CDrawContext* context, const CRect& update_rect_)
   // DtBlkFix: the image has 6 labels; rebuild it with the 4 that are left, centred in 4 columns:
   // plain background from the label-free rows at the bottom, then each label with its glow
   CContextRGBA* bg = _gui->_images.glob_bg;
-  int bg_w = bg->getWidth(), bg_h = bg->getHeight();
+  int bg_w = bg->getWidth(), bg_h = getHeight(); // taller than the image, see Gui::globHeight
   for (int y = 0; y < bg_h; y += 5)
     bg->blend(temp_bm, CRect(0, y, bg_w, std::min(y + 5, bg_h)), CPoint(0, 21), 255, false);
   static const int label_x[4][2] = {{0, 72}, {77, 132}, {202, 277}, {342, 409}};

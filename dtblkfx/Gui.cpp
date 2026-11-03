@@ -340,7 +340,7 @@ bool Gui::open(void* system_window)
 
   // temporary bitmap for children to use as an offscreen buffer
   _temp_bm.create(rect.right,
-                  max(_images.glob_bg->getHeight(), _images.fx_bg->getHeight()),
+                  max(globHeight(), (int)_images.fx_bg->getHeight()),
                   /*DtBlkFix: scale*/ _scale);
   if (!_temp_bm.ok())
     return false;
@@ -356,10 +356,11 @@ bool Gui::open(void* system_window)
 
   // place global controls
   NewView(_glob_ctrl, frame);
-  _glob_ctrl->init(/*gui*/ this, /*size*/ Offset(p, _images.glob_bg));
+  _glob_ctrl->init(/*gui*/ this,
+                   /*size*/ CRect(p.x, p.y, p.x + _images.glob_bg->getWidth(), p.y + globHeight()));
   if (!_glob_ctrl->ok())
     return false;
-  p.y += _images.glob_bg->getHeight();
+  p.y += globHeight();
 
   // place spectrograms
   for (i = 0; i < 2; i++)
@@ -686,7 +687,7 @@ void Gui::layoutRows()
     n_rows++; // "+" row
 
   rect.right = (VstInt16)_images.glob_bg->getWidth();
-  rect.bottom = (VstInt16)(_images.glob_bg->getHeight() + _images.splash_bg->getHeight() +
+  rect.bottom = (VstInt16)(globHeight() + _images.splash_bg->getHeight() +
                            _images.fx_bg->getHeight() / 5 * n_rows);
 }
 
@@ -819,19 +820,11 @@ void FxAddRow::drawRect(CDrawContext* context, const CRect& update_rect)
                              /*alpha*/ 255,
                              /*use src alpha*/ false);
 
-  // a "+" drawn like the rows' "x": dark outline, then the cross
-  CPoint c(getWidth() / 2, getHeight() / 2);
-  for (int pass = 0; pass < 2; pass++) {
-    temp_bm->setLineWidth(pass ? 1 : 3);
-    temp_bm->setFrameColor(
-        pass ? (_hover ? CColorRGB(0xff, 0x80, 0x80) : CColorRGB(0xff, 0xff, 0xff))
-             : CColorRGB(0, 0, 0));
-    temp_bm->moveTo(CPoint(c.x - 6, c.y));
-    temp_bm->lineTo(CPoint(c.x + 6, c.y));
-    temp_bm->moveTo(CPoint(c.x, c.y - 6));
-    temp_bm->lineTo(CPoint(c.x, c.y + 6));
-  }
-  temp_bm->setLineWidth(1);
+  // a big "+" in the outlined text style of the rest of the editor
+  temp_bm->setFont(kNormalFont, /*sz*/ 20, kBoldFace);
+  temp_bm->setFillColor(CColorRGB(0, 0, 0));
+  temp_bm->setFontColor(_hover ? CColorRGB(0xff, 0x80, 0x80) : CColorRGB(0xff, 0xff, 0xff));
+  OutlineDrawString(temp_bm, MoveToOrigin(this), "+", kCenterText);
 
   CViewDrawContext dc(this);
   temp_bm->blend(&dc, /*dst rect*/ this, /*src point*/ CPoint(0, 0), 255, /*src alpha*/ false);
