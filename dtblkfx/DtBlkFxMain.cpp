@@ -197,6 +197,9 @@ bool /*ok*/ DtBlkFixLoadImages(const char* skin_dir, float scale, GuiImages* dst
     string file = string(skin_dir) + "\\" + (g_load_images[i].file_name + strlen(BLKFX_DIR));
     if (!ReadPng(slot[i]->New(), file, err, scale))
       ok = false;
+    // the global controls' labels are drawn smaller, so load them pre-scaled too
+    if (slot[i] == &dst->glob_bg && !ReadPng(dst->glob_lbl.New(), file, err, scale * GLOB_LABEL_SCALE))
+      ok = false;
   }
   return ok;
 }

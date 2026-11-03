@@ -51,9 +51,14 @@ GUI_GLOBAL_EXTERN VstGuiRef<CContextRGBA>
     g_fx_bg;
 };
 
+// DtBlkFix: the global controls are one line, with their labels this size beside the values
+static const float GLOB_LABEL_SCALE = 0.65f;
+
 // DtBlkFix: the images that a Gui draws with (a skin, at the UI scale)
 struct GuiImages {
   VstGuiRef<CContextRGBA> splash_bg, glob_bg, fx_bg;
+  // the global controls image again, at GLOB_LABEL_SCALE of the UI scale, for its labels
+  VstGuiRef<CContextRGBA> glob_lbl;
   Array<VstGuiRef<CContextRGBA>, 2> slider_bg, slider_knob; // index COARSE or FINE
 };
 
@@ -186,8 +191,8 @@ public: // DtBlkFix: only the effects in use get a row, with "+" to add one and 
   // override AEffGUIEditor: size depends on the rows
   virtual bool getRect(ERect** rect);
 
-  // height of the global controls: the image plus room between the labels and the values
-  int globHeight() { return _images.glob_bg->getHeight() + 10; }
+  // height of the global controls: one line, labels beside the values
+  int globHeight() { return 22; }
 
   // effect slots shown, in order
   std::vector<int> _rows;

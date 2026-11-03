@@ -133,6 +133,7 @@ Gui::Gui(AudioEffect* effect)
   // DtBlkFix: original images & size until setView() is called
   _images.splash_bg = Images::g_splash_bg;
   _images.glob_bg = Images::g_glob_bg;
+  _images.glob_lbl = Images::g_glob_bg; // stretched when drawn
   _images.fx_bg = Images::g_fx_bg;
   for (int i = 0; i < 2; i++) {
     _images.slider_bg[i] = DtPopupHSlider::Images::g_bg[i];

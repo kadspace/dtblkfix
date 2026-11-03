@@ -74,7 +74,7 @@ static std::vector<int> usedFx(Engine& e)
 static int editorHeight(Engine& e)
 {
   int rows = (int)usedFx(e).size();
-  return 36 + 191 + 24 * (rows + (rows < 8 ? 1 : 0));
+  return 22 + 191 + 24 * (rows + (rows < 8 ? 1 : 0));
 }
 
 // a left click at view position (x, y) in the editor's window
@@ -221,7 +221,7 @@ int main()
     check(h == editorHeight(e), "editor: one row per effect in use and a + row");
 
     // "+" is the row after the effects
-    click(frame, 205, 227 + 24 * (int)before.size() + 12);
+    click(frame, 205, 213 + 24 * (int)before.size() + 12);
     std::vector<int> added = usedFx(e);
     int slot = before.back() + 1;
     check(added.size() == before.size() + 1 && added.back() == slot &&
@@ -238,7 +238,7 @@ int main()
     check(r.bottom == editorHeight(e), "the editor grows by a row");
 
     // "x" on the first row
-    click(frame, 9, 227 + 12);
+    click(frame, 9, 213 + 12);
     std::vector<int> removed = usedFx(e);
     bool moved_up = removed.size() == before.size();
     for (int i = 0; i < 5; i++)
