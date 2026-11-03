@@ -32,7 +32,7 @@ To make a skin, copy the `stereo_*.png` files from `DtBlkFix.vst3\Contents\Resou
 
 ## Building
 
-You need Windows, Visual Studio 2022, CMake 3.22 or later, Python 3, a [JUCE 8](https://github.com/juce-framework/JUCE) checkout and the [64-bit FFTW 3.3.5 DLLs](https://www.fftw.org/install/windows.html).
+You need Windows, Visual Studio 2022 or later, CMake 3.22 or later, Python 3, a [JUCE 8](https://github.com/juce-framework/JUCE) checkout and the [64-bit FFTW 3.3.5 DLLs](https://www.fftw.org/install/windows.html).
 
 ```
 cmake -S . -B build -A x64 -DDTBLKFIX_JUCE_DIR=<JUCE> -DDTBLKFIX_FFTW_DIR=<folder with libfftw3f-3.dll>
