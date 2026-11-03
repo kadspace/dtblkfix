@@ -52,7 +52,7 @@ GUI_GLOBAL_EXTERN VstGuiRef<CContextRGBA>
 };
 
 // DtBlkFix: the global controls are one line, with their labels this size beside the values
-static const float GLOB_LABEL_SCALE = 0.65f;
+static const float GLOB_LABEL_SCALE = 15.0f / 21.0f;
 
 // DtBlkFix: the images that a Gui draws with (a skin, at the UI scale)
 struct GuiImages {

@@ -157,6 +157,23 @@ void OutlineDrawString(CDrawContext* context,
 }
 
 //-------------------------------------------------------------------------------------------------
+CCoord StringWidth(CDrawContext* context, const char* str)
+{
+#ifdef _WIN32
+  HDC dc = (HDC)context->getSystemContext();
+  HGDIOBJ font = context->getFont() ? (HGDIOBJ)context->getFont()->getPlatformFont() : NULL;
+  HGDIOBJ old_font = font ? SelectObject(dc, font) : NULL;
+  SIZE size = {0, 0};
+  GetTextExtentPoint32A(dc, str, (int)strlen(str), &size);
+  if (old_font)
+    SelectObject(dc, old_font);
+  return (CCoord)size.cx;
+#else
+  return context->getStringWidth(str);
+#endif
+}
+
+//-------------------------------------------------------------------------------------------------
 void OffsetDrawContext(CDrawContext* dc, CView* view)
 // set the drawing context offset to match the given view
 {

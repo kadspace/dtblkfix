@@ -66,51 +66,20 @@ template <class STR> void BlkLenText(STR& str, int samps, float sample_rate)
 }
 
 //-------------------------------------------------------------------------------------------------
-// DtBlkFix: one line of 4 controls (MixBack, Power, Overlap, BlkLen), each with its label from the
-// image, drawn smaller (GLOB_LABEL_SCALE), and its value beside it, spread evenly over the width
+// DtBlkFix: the global controls are one line: each label, cut from the image and drawn at
+// GLOB_LABEL_SCALE, with its value beside it on the same baseline, the 4 pairs evenly spaced
 static const struct {
-  int lbl_x0, lbl_x1; // the label in the image (rows 0 to 21)
-  int val_w;          // room for the value (its widest usual text)
-} g_glob_col[4] = {{0, 72, 32}, {77, 132, 36}, {202, 277, 26}, {342, 409, 102}};
-static const int GLOB_LABEL_H = 21;  // label height in the image
-static const int GLOB_LABEL_GAP = 4; // between label and value
-
-static int GlobLabelW(int i)
-{
-  return RndToInt((float)(g_glob_col[i].lbl_x1 - g_glob_col[i].lbl_x0) * GLOB_LABEL_SCALE);
-}
-
-static void GlobLayout(int width,
-                       int height,
-                       int i,
-                       int* label_x, // return: where the label starts
-                       CRect* col)   // return: the control's rectangle
-{
-  int x[5], end[4], used = 0;
-  for (int j = 0; j < 4; j++)
-    used += GlobLabelW(j) + GLOB_LABEL_GAP + g_glob_col[j].val_w;
-  // spare room: half a gap at each end, a gap between
-  float gap = (float)std::max(width - used, 0) / 4.0f;
-  float pos = gap * 0.5f;
-  for (int j = 0; j < 4; j++) {
-    x[j] = RndToInt(pos);
-    pos += GlobLabelW(j) + GLOB_LABEL_GAP + g_glob_col[j].val_w;
-    end[j] = RndToInt(pos);
-    pos += gap;
-  }
-  *label_x = x[i];
-  int left = i == 0 ? 0 : (end[i - 1] + x[i]) / 2;
-  int right = i == 3 ? width : (end[i] + x[i + 1]) / 2;
-  *col = CRect(left, 0, right, height);
-}
-
-static CRect GlobCol(int i, int width, int height)
-{
-  int label_x;
-  CRect col;
-  GlobLayout(width, height, i, &label_x, &col);
-  return col;
-}
+  int x0, x1;      // the label's glyphs in the image
+  const char* typ; // a usual value, for the spacing
+} g_glob_lbl[4] = {
+    {2, 69, "50%"}, {82, 129, "match"}, {207, 273, "60%"}, {347, 404, "92.9 ms \xb7 4096"}};
+// label rows in the image, 1 to 22: 21 rows (15 at GLOB_LABEL_SCALE) with the baseline 14 rows (10)
+// down, so both land on whole view units
+static const int GLOB_LBL_Y0 = 1, GLOB_LBL_Y1 = 22, GLOB_LBL_BASE = 15;
+static const int GLOB_LBL_PAD = 4;    // glow around the glyphs
+static const int GLOB_LBL_GAP = 6;    // between label and value
+static const int GLOB_VAL_FONT = 11;  // value font size: its capitals are as tall as the labels'
+static const float GLOB_BASELINE = 15.0f; // baseline of the values in the strip
 
 //-------------------------------------------------------------------------------------------------
 bool /*success*/ GlobalCtrl::init(Gui* gui, CastCRect rect)
@@ -134,18 +103,14 @@ bool /*success*/ GlobalCtrl::init(Gui* gui, CastCRect rect)
   // size of each child rectangle
   // DtBlkFix: 4 columns (MixBack, Power, Overlap, BlkLen): Delay is automatic (one block, reported
   // to the host) and Sync is always on, so neither has a control any more
-  int w = rect.width(), h = rect.height();
-
   //
   _mixback.New();
-  _mixback->setSize(GlobCol(0, w, h));
   _mixback->setTag(BlkFxParam::MIX_BACK);
   _mixback->setListener(this);
   AddView(_mixback, this);
 
   //
   _pwrmatch.New();
-  _pwrmatch->setSize(GlobCol(1, w, h));
   _pwrmatch->setTag(BlkFxParam::MIX_BACK);
   _pwrmatch->setListener(this);
   AddView(_pwrmatch, this);
@@ -160,7 +125,6 @@ bool /*success*/ GlobalCtrl::init(Gui* gui, CastCRect rect)
 
   // overlap
   _overlap.New();
-  _overlap->setSize(GlobCol(2, w, h));
   _overlap->setTag(BlkFxParam::OVERLAP);
   _overlap->setListener(this);
   AddView(_overlap, this);
@@ -175,7 +139,6 @@ bool /*success*/ GlobalCtrl::init(Gui* gui, CastCRect rect)
 
   // block size
   _blksz.New();
-  _blksz->setSize(GlobCol(3, w, h));
   _blksz->setTag(BlkFxParam::FFT_LEN);
   _blksz->setListener(this);
   _blksz->setMenuSnap();
@@ -198,11 +161,54 @@ bool /*success*/ GlobalCtrl::init(Gui* gui, CastCRect rect)
   }
   _overlap->addMenuEntry(1.0f, "maximum");
 
+  // DtBlkFix: place the controls (drawRect redoes this for the actual values)
+  const char* typ[4];
+  for (i = 0; i < 4; i++)
+    typ[i] = g_glob_lbl[i].typ;
+  layout(typ);
+
   //
   updateMenus();
 
   _ok = true;
   return true;
+}
+
+//-------------------------------------------------------------------------------------------------
+void GlobalCtrl::layout(const char* const val[4])
+// DtBlkFix: lay out the one line (see g_glob_lbl) for these values, with the same space at each
+// end as between the label & value pairs, and fit the controls to it
+{
+  int i, w = getWidth(), h = getHeight();
+  CContextRGBA* temp_bm = &_gui->_temp_bm;
+  temp_bm->setFont(kNormalFont, GLOB_VAL_FONT, kBoldFace);
+  float lbl_w[4], used = 0.0f;
+  for (i = 0; i < 4; i++) {
+    lbl_w[i] = (float)(g_glob_lbl[i].x1 - g_glob_lbl[i].x0) * GLOB_LABEL_SCALE;
+    _val_w[i] = StringWidth(temp_bm, val[i]);
+    used += lbl_w[i] + GLOB_LBL_GAP + (float)_val_w[i];
+  }
+  float gap = std::max((float)w - used, 0.0f) / 5.0f, pos = gap;
+  int end[4];
+  for (i = 0; i < 4; i++) {
+    _lbl_x[i] = pos;
+    pos += lbl_w[i] + GLOB_LBL_GAP;
+    _val_x[i] = RndToInt(pos);
+    pos += (float)_val_w[i];
+    end[i] = RndToInt(pos);
+    pos += gap;
+  }
+  // each control reaches halfway to the next
+  CRect col[4];
+  for (i = 0; i < 4; i++)
+    col[i] = CRect(i == 0 ? 0 : (end[i - 1] + RndToInt(_lbl_x[i])) / 2,
+                   0,
+                   i == 3 ? w : (end[i] + RndToInt(_lbl_x[i + 1])) / 2,
+                   h);
+  _mixback->setSize(col[0]);
+  _pwrmatch->setSize(col[1]);
+  _overlap->setSize(col[2]);
+  _blksz->setSize(col[3]);
 }
 
 //-------------------------------------------------------------------------------------------------
@@ -221,83 +227,80 @@ void GlobalCtrl::drawRect(CDrawContext* context, const CRect& update_rect_)
   // colours
   CColorRGB focus_txt_col(0xff, 0x80, 0x80), normal_txt_col(0xff, 0xff, 0xff);
 
-  // update rect relative to our corner
-  CRect rel_update_rect = Offset(-TopLeft(this), update_rect);
-
   // temporary bitmap to draw into
   CContextRGBA* temp_bm = &_gui->_temp_bm;
+
+  // DtBlkFix: the values, first, since the layout depends on them (see layout())
+  CharArray<32> val[4];
+  val[0] << RndToInt(_mixback->getValue() * 100.0f) << "%";
+  val[1] << (_pwrmatch->getTentativeValue() ? "match" : "filter");
+  // get guesses for these
+  int guess_fft_n, guess_time_n;
+  blkFx()->guessFFTLen(/*return*/ guess_fft_n, /*return*/ guess_time_n);
+  int samps_fwd = BlkFxParam::getBlkShiftFwd(_overlap->getValue(), guess_time_n);
+  float overlap_frac = 1.0f - ((float)samps_fwd / (float)guess_time_n);
+  val[2] << RndToInt(overlap_frac * 100.0f) << "%";
+  // in ms and samples (the delay is always one block, so no more "*" for a block longer than the
+  // delay)
+  BlkLenText(val[3], g_fft_sz[getBlkSzPlan()], blkFx()->getSampleRate());
+
+  // a value changed width: lay out again and draw it all
+  temp_bm->setFont(kNormalFont, GLOB_VAL_FONT, kBoldFace);
+  bool all = false;
+  for (int i = 0; i < 4; i++)
+    if (StringWidth(temp_bm, val[i]) != _val_w[i])
+      all = true;
+  if (all) {
+    const char* v[4] = {val[0], val[1], val[2], val[3]};
+    layout(v);
+    update_rect = size;
+  }
+
+  // update rect relative to our corner
+  CRect rel_update_rect = Offset(-TopLeft(this), update_rect);
   temp_bm->setClipRect(rel_update_rect);
 
   // copy background bitmap into our offscreen
   // DtBlkFix: the image has 6 labels over 2 lines; rebuild it as one line with the 4 that are
-  // left (see g_glob_col): plain background from the label-free rows at the bottom, then each
+  // left (see g_glob_lbl): plain background from the label-free rows at the bottom, then each
   // label with its glow, smaller, and the value beside it
   CContextRGBA* bg = _gui->_images.glob_bg;
   int bg_w = bg->getWidth(), bg_h = getHeight();
   for (int y = 0; y < bg_h; y += 5)
     bg->blend(temp_bm, CRect(0, y, bg_w, std::min(y + 5, bg_h)), CPoint(0, 21), 255, false);
 
-  // draw text into bitmap
-  temp_bm->setFont(kNormalFont, /*sz*/ 0, kBoldFace);
-  temp_bm->setFillColor(CColorRGB(0, 0, 0));
-
-  CRect val_rect[4];
-  int label_h = RndToInt(GLOB_LABEL_H * GLOB_LABEL_SCALE);
+  // labels, on the values' baseline
+  float k = GLOB_LABEL_SCALE, top = GLOB_BASELINE - (GLOB_LBL_BASE - GLOB_LBL_Y0) * k;
   for (int i = 0; i < 4; i++) {
-    int x, label_w = GlobLabelW(i);
-    CRect col;
-    GlobLayout(bg_w, bg_h, i, &x, &col);
-    int y = (bg_h - label_h) / 2;
-    _gui->_images.glob_lbl->blend(temp_bm,
-                                  /*dst*/ CRect(x, y, x + label_w, y + label_h),
-                                  /*src*/ CRect(g_glob_col[i].lbl_x0, 0, g_glob_col[i].lbl_x1, GLOB_LABEL_H),
-                                  255,
-                                  false);
-    val_rect[i] = CRect(x + label_w + GLOB_LABEL_GAP, 0, col.right, bg_h);
+    CRect src(std::max(g_glob_lbl[i].x0 - GLOB_LBL_PAD, 0),
+              GLOB_LBL_Y0,
+              std::min(g_glob_lbl[i].x1 + GLOB_LBL_PAD, (int)bg->getWidth()),
+              GLOB_LBL_Y1);
+    float x = _lbl_x[i] + (float)(src.left - g_glob_lbl[i].x0) * k;
+    CRect dst(RndToInt(x),
+              RndToInt(top),
+              RndToInt(x + src.width() * k),
+              RndToInt(top + src.height() * k));
+    _gui->_images.glob_lbl->blend(temp_bm, dst, src, 255, false);
   }
 
-  // string for printing into
-  CharArray<32> str;
-
-  // mixback text
-  if (ShouldDrawView(update_rect, _mixback)) {
-    str << RndToInt(_mixback->getValue() * 100.0f) << "%";
-    temp_bm->setFontColor(_mixback->getState() == _mixback->INACTIVE ? normal_txt_col
-                                                                     : focus_txt_col);
-    OutlineDrawString(temp_bm, val_rect[0], str, kLeftText);
-  }
-
-  // power match
-  if (ShouldDrawView(update_rect, _pwrmatch)) {
-    str << (_pwrmatch->getTentativeValue() ? "match" : "filter");
-    temp_bm->setFontColor(_pwrmatch->getState() == _pwrmatch->INACTIVE ? normal_txt_col
-                                                                       : focus_txt_col);
-    OutlineDrawString(temp_bm, val_rect[1], str, kLeftText);
-  }
-
-  // get guesses for these
-  int guess_fft_n, guess_time_n;
-  blkFx()->guessFFTLen(/*return*/ guess_fft_n, /*return*/ guess_time_n);
-
-  // overlap
-  if (ShouldDrawView(update_rect, _overlap)) {
-    int samps_fwd = BlkFxParam::getBlkShiftFwd(_overlap->getValue(), guess_time_n);
-    float overlap_frac = 1.0f - ((float)samps_fwd / (float)guess_time_n);
-    str << RndToInt(overlap_frac * 100.0f) << "%";
-    temp_bm->setFontColor(_overlap->getState() == _overlap->INACTIVE ? normal_txt_col
-                                                                     : focus_txt_col);
-    OutlineDrawString(temp_bm, val_rect[2], str, kLeftText);
-  }
-
-  // fft len
-  if (ShouldDrawView(update_rect, _blksz)) {
-    // DtBlkFix: in ms and samples (the delay is always one block, so no more "*" for a block
-    // longer than the delay)
-    int fft_len = g_fft_sz[getBlkSzPlan()];
-    BlkLenText(str, fft_len, blkFx()->getSampleRate());
-
-    temp_bm->setFontColor(_blksz->getState() == _blksz->INACTIVE ? normal_txt_col : focus_txt_col);
-    OutlineDrawString(temp_bm, val_rect[3], str, kLeftText);
+  // values: dark on a light skin with a light outline (as everywhere), light on a dark skin with a
+  // dark outline (the light outline swamps the small type)
+  unsigned long bg_col = PtrRGBA(bg->data())._get(); // bottom left, plain background
+  bool dark_bg = ((bg_col >> 16) & 0xff) * 3 + ((bg_col >> 8) & 0xff) * 6 + (bg_col & 0xff) < 1280;
+  temp_bm->setFont(kNormalFont, GLOB_VAL_FONT, kBoldFace);
+  CView* view[4] = {_mixback, _pwrmatch, _overlap, _blksz};
+  bool focus[4] = {_mixback->getState() != _mixback->INACTIVE,
+                   _pwrmatch->getState() != _pwrmatch->INACTIVE,
+                   _overlap->getState() != _overlap->INACTIVE,
+                   _blksz->getState() != _blksz->INACTIVE};
+  for (int i = 0; i < 4; i++) {
+    if (!ShouldDrawView(update_rect, view[i]))
+      continue;
+    CColor txt_col = focus[i] ? focus_txt_col : normal_txt_col, black = CColorRGB(0, 0, 0);
+    temp_bm->setFontColor(dark_bg ? black : txt_col);  // outline
+    temp_bm->setFillColor(dark_bg ? txt_col : black);  // inside
+    OutlineDrawString(temp_bm, CRect(_val_x[i], 0, _val_x[i] + _val_w[i] + 10, bg_h), val[i], kLeftText);
   }
 
   // blend region to update onto the screen

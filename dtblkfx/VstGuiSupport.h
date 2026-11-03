@@ -516,6 +516,11 @@ void OutlineDrawString(CDrawContext* context,
 );
 
 //-------------------------------------------------------------------------------------------------
+// DtBlkFix: width of a string in the context's font, in view units (CDrawContext::getStringWidth
+// measures with whichever font was last drawn with)
+CCoord StringWidth(CDrawContext* context, const char* str);
+
+//-------------------------------------------------------------------------------------------------
 // set the drawing context offset to match the given view
 void OffsetDrawContext(CDrawContext* dc, CView* view);
 
