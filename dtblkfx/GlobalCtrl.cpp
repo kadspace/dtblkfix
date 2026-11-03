@@ -58,6 +58,14 @@ GlobalCtrl::~GlobalCtrl()
 }
 
 //-------------------------------------------------------------------------------------------------
+template <class STR> void BlkLenText(STR& str, int samps, float sample_rate)
+// DtBlkFix: block length as "92.9 ms · 4096"
+{
+  float ms = 1000.0f * (float)samps / std::max(sample_rate, 1.0f);
+  str << sprf(ms < 10.0f ? "%.2f" : ms < 100.0f ? "%.1f" : "%.0f", ms) << " ms \xb7 " << samps;
+}
+
+//-------------------------------------------------------------------------------------------------
 bool /*success*/ GlobalCtrl::init(Gui* gui, CastCRect rect)
 //
 // expect gui to have been init'd with:
@@ -77,7 +85,9 @@ bool /*success*/ GlobalCtrl::init(Gui* gui, CastCRect rect)
   _text_height = 15;
 
   // size of each child rectangle
-  CRect r = GetTile(MoveToOrigin(rect), /*div x*/ 6, /*div y*/ 1);
+  // DtBlkFix: 4 columns (MixBack, Power, Overlap, BlkLen): Delay is automatic (one block, reported
+  // to the host) and Sync is always on, so neither has a control any more
+  CRect r = GetTile(MoveToOrigin(rect), /*div x*/ 4, /*div y*/ 1);
 
   //
   _mixback.New();
@@ -95,29 +105,30 @@ bool /*success*/ GlobalCtrl::init(Gui* gui, CastCRect rect)
 
   //
   _delay.New();
-  _delay->setSize(TileOffset(r, /*idx x*/ 2, /*idx y*/ 0));
+  _delay->setSize(CRect(0, 0, 0, 0)); // DtBlkFix: hidden
+  _delay->setMouseEnabled(false);
   _delay->setTag(BlkFxParam::DELAY);
   _delay->setListener(this);
   AddView(_delay, this);
 
   // overlap
   _overlap.New();
-  _overlap->setSize(TileOffset(r, /*idx x*/ 3, /*idx y*/ 0));
+  _overlap->setSize(TileOffset(r, /*idx x*/ 2, /*idx y*/ 0));
   _overlap->setTag(BlkFxParam::OVERLAP);
   _overlap->setListener(this);
   AddView(_overlap, this);
 
   // block sync
   _blksync.New();
-  _blksync->setSize(TileOffset(r, /*idx x*/ 4, /*idx y*/ 0));
+  _blksync->setSize(CRect(0, 0, 0, 0)); // DtBlkFix: hidden, Sync is always on
+  _blksync->setMouseEnabled(false);
   _blksync->setTag(BlkFxParam::OVERLAP);
   _blksync->setListener(this);
-  _blksync->setMouseEnabled(false); // DtBlkFix: Sync is always on
   AddView(_blksync, this);
 
   // block size
   _blksz.New();
-  _blksz->setSize(TileOffset(r, /*idx x*/ 5, /*idx y*/ 0));
+  _blksz->setSize(TileOffset(r, /*idx x*/ 3, /*idx y*/ 0));
   _blksz->setTag(BlkFxParam::FFT_LEN);
   _blksz->setListener(this);
   _blksz->setMenuSnap();
@@ -171,12 +182,18 @@ void GlobalCtrl::drawRect(CDrawContext* context, const CRect& update_rect_)
   temp_bm->setClipRect(rel_update_rect);
 
   // copy background bitmap into our offscreen
-  _gui->_images.glob_bg->blend(temp_bm,         // destination
-                               rel_update_rect, // dest point
-                               rel_update_rect, // source rectangle
-                               255,             // overall alpha
-                               false            // use source alpha
-  );
+  // DtBlkFix: the image has 6 labels; rebuild it with the 4 that are left, centred in 4 columns:
+  // plain background from the label-free rows at the bottom, then each label with its glow
+  CContextRGBA* bg = _gui->_images.glob_bg;
+  int bg_w = bg->getWidth(), bg_h = bg->getHeight();
+  for (int y = 0; y < bg_h; y += 5)
+    bg->blend(temp_bm, CRect(0, y, bg_w, std::min(y + 5, bg_h)), CPoint(0, 21), 255, false);
+  static const int label_x[4][2] = {{0, 72}, {77, 132}, {202, 277}, {342, 409}};
+  for (int i = 0; i < 4; i++) {
+    int label_w = label_x[i][1] - label_x[i][0];
+    int x = (2 * i + 1) * bg_w / 8 - label_w / 2;
+    bg->blend(temp_bm, CRect(x, 0, x + label_w, 21), CPoint(label_x[i][0], 0), 255, false);
+  }
 
   // draw text into bitmap
   temp_bm->setFont(kNormalFont, /*sz*/ 0, kBoldFace);
@@ -201,23 +218,6 @@ void GlobalCtrl::drawRect(CDrawContext* context, const CRect& update_rect_)
     OutlineDrawString(temp_bm, textRect(_pwrmatch), str);
   }
 
-  // build delay param
-  BlkFxParam::Delay delay_param;
-  delay_param.setUnits(_delay_units);
-  delay_param.f_part = _delay->getValue(); // fractional part, 0..1
-
-  // turn delay into samples
-  float delay_samps = (float)(blkFx()->getDelaySamps(delay_param) - blkFx()->_initial_delay);
-
-  //
-  if (ShouldDrawView(update_rect, _delay)) {
-    (void)delay_samps;
-    str << "auto";
-
-    temp_bm->setFontColor(_delay->getState() == _delay->INACTIVE ? normal_txt_col : focus_txt_col);
-    OutlineDrawString(temp_bm, textRect(_delay), str);
-  }
-
   // get guesses for these
   int guess_fft_n, guess_time_n;
   blkFx()->guessFFTLen(/*return*/ guess_fft_n, /*return*/ guess_time_n);
@@ -232,21 +232,12 @@ void GlobalCtrl::drawRect(CDrawContext* context, const CRect& update_rect_)
     OutlineDrawString(temp_bm, textRect(_overlap), str);
   }
 
-  // blk sync
-  if (ShouldDrawView(update_rect, _blksync)) {
-    str << "on"; // DtBlkFix: Sync is always on
-    temp_bm->setFontColor(_blksync->getState() == _blksync->INACTIVE ? normal_txt_col
-                                                                     : focus_txt_col);
-    OutlineDrawString(temp_bm, textRect(_blksync), str);
-  }
-
   // fft len
   if (ShouldDrawView(update_rect, _blksz)) {
+    // DtBlkFix: in ms and samples (the delay is always one block, so no more "*" for a block
+    // longer than the delay)
     int fft_len = g_fft_sz[getBlkSzPlan()];
-    float fft_secs = (float)fft_len / blkFx()->getSampleRate();
-
-    // put an asterisk after if the FFT len is longer than the delay
-    str << sprnum(fft_secs) << "sec" << (fft_len > delay_samps ? " *" : "");
+    BlkLenText(str, fft_len, blkFx()->getSampleRate());
 
     temp_bm->setFontColor(_blksz->getState() == _blksz->INACTIVE ? normal_txt_col : focus_txt_col);
     OutlineDrawString(temp_bm, textRect(_blksz), str);
@@ -327,11 +318,8 @@ void GlobalCtrl::updateMenus()
       _blksz->addMenuEntry(/*value*/ -1, /*text*/ "");
 
     for (i = 0; i < NUM_FFT_SZ; i++) {
-      int samps = g_fft_sz[i];
-      float sec = (float)samps / _sample_rate;
-      float beats = (float)samps / _samps_per_beat;
-      str << sprnum(sec, 1e-3f) << "sec " << (int)samps << " samps, "
-          << sprf("(%.2f beats)", beats);
+      // DtBlkFix: ms and samples, as shown
+      BlkLenText(str, g_fft_sz[i], _sample_rate);
 
       //
       float value = (float)i / (float)NUM_FFT_SZ;

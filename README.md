@@ -6,14 +6,14 @@ DtBlkFx is Darrell Tam's FFT effect from 2005–2006: up to eight spectral effec
 
 ## Fixed
 
-- **Timing.** DtBlkFx delayed its output by one block but told the host its latency was zero, so at the default settings everything came out a beat late. DtBlkFix reports the delay, and the host compensates for it.
-- **Song sync.** DtBlkFx checked the song position about once a beat, and only with Sync on, so after a loop, a jump or a tempo change the blocks drifted off the beat, and where they landed depended on the host's buffer size. In DtBlkFix, Sync is always on and follows the song position on every buffer: a block starts on every beat, right after a loop or jump, at any buffer size. With no song position, as in the standalone app, there's no beat to follow.
+- **Timing.** DtBlkFx delayed its output by one block but told the host its latency was zero, so at the default settings everything came out a beat late. DtBlkFix always delays by exactly one block and reports it, so the host compensates for it, and the Delay control is gone.
+- **Song sync.** DtBlkFx checked the song position about once a beat, and only with Sync on, so after a loop, a jump or a tempo change the blocks drifted off the beat, and where they landed depended on the host's buffer size. In DtBlkFix, Sync is always on, so its control is gone, and blocks follow the song position on every buffer: a block starts on every beat, right after a loop or jump, at any buffer size. With no song position, as in the standalone app, there's no beat to follow.
 - **Window size.** The original is a fixed 410 by 409 pixel window, which is tiny on a modern screen. DtBlkFix scales it to 75, 100, 125, 150 or 200%. Text and lines are drawn at the new size, so it stays sharp.
 - **Skins.** The original look, plus Dark and Warm. A skin is just the folder of images the plugin already loads, so you can make your own.
 - **Effect rows.** The original always showed eight effect rows, most of them empty. DtBlkFix shows only the effects in use. **+** below them adds one, and the **×** at the end of a row removes it.
 - **Formats.** DtBlkFix is a 64-bit VST3 and a standalone app, with a Windows installer.
 
-Apart from Sync, the audio is bit-identical to the original. That's the whole list. There are no new effects, and the only new controls are + and ×, and Size and Skin.
+Apart from Sync, the audio is bit-identical to the original. That's the whole list. There are no new effects. The only new controls are + and ×, and Size and Skin; Delay and Sync are gone, and BlkLen shows the block length in ms and samples.
 
 ## Installing
 

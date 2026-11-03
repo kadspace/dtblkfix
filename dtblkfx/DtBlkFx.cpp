@@ -870,11 +870,9 @@ bool /*true=printed*/ DtBlkFx::getParamDisplayGlobal(BlkFxParam::SplitParamNum& 
       int fft_len, time_len;
       guessFFTLen(/*return*/ fft_len, /*return*/ time_len);
 
-      // determine blk size in seconds
-      float sec = fft_len / sampleRate;
-
-      // print blk size in seconds or msec
-      text << sprnum(sec) << "sec";
+      // DtBlkFix: blk size in ms, as in the editor
+      float ms = 1000.0f * fft_len / sampleRate;
+      text << sprf(ms < 10.0f ? "%.2f" : ms < 100.0f ? "%.1f" : "%.0f", ms) << " ms";
       return true;
     }
 
