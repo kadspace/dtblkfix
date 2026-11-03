@@ -4,7 +4,8 @@
 //
 // 1. With Sync on and a host transport (start offsets, loops, jumps, a tempo change), the
 //    output is bit-identical at every buffer size from 32 to 4096, and with mixed sizes.
-// 2. After every loop or jump a block starts on each beat (blocks shorter than a beat).
+// 2. After every loop or jump a block starts on each beat (blocks shorter than a beat), with the
+//    Sync switch on or off (Sync is always on).
 // 3. The reported latency equals the delay measured with an impulse, at every block size.
 
 #include "harness.h"
@@ -129,11 +130,14 @@ int main(int argc, char** argv)
     }
   }
 
-  // --- 2. a block starts on every beat
-  for (size_t ci = 0; ci < cases.size(); ci++) {
+  // --- 2. a block starts on every beat, whatever the Sync switch says
+  for (size_t run = 0; run < 2 * cases.size(); run++) {
+    size_t ci = run % cases.size();
+    bool switch_on = run < cases.size();
     harness::Transport t = cases[ci].transport;
     DtBlkFx* fx = harness::create(&t, 16);
-    syncOn(fx, 0); // 4096 sample blocks, shorter than a beat
+    fx->setProgram(0); // 4096 sample blocks, shorter than a beat
+    fx->setParameter(BlkFxParam::OVERLAP, switch_on ? 0.65f : 0.35f);
     std::vector<long> starts;
     harness::render(fx, &t, in_l, in_r, out_l, out_r, std::vector<long>(1, 16), &starts);
     delete fx;
@@ -163,7 +167,8 @@ int main(int argc, char** argv)
     char what[256];
     snprintf(what,
              sizeof(what),
-             "Sync on, %s: a block starts on all %d beats",
+             "Sync switch %s, %s: a block starts on all %d beats",
+             switch_on ? "on " : "off",
              cases[ci].name,
              (int)beats.size());
     check(missed == 0 && !beats.empty(), what);

@@ -33,9 +33,9 @@ if(DTBLKFIX_REFERENCE_DIR)
   if(DTBLKFIX_FFTW_DIR)
     set(out ${CMAKE_CURRENT_BINARY_DIR}/renders)
     file(MAKE_DIRECTORY ${out})
-    # each case: name and render options
-    foreach(case "sync_off:--sync-off" "sync_off_host:--sync-off;--host"
-                 "sync_off_buf64:--sync-off;--buf;64" "as_is:" "as_is_host:--host")
+    # each case: name and render options. Without a host: with a host transport every preset
+    # follows the beat (Sync is always on), which the original only did with Sync on.
+    foreach(case "sync_off:--sync-off" "sync_off_buf64:--sync-off;--buf;64" "as_is:")
       string(REPLACE ":" ";" case "${case}")
       list(GET case 0 case_name)
       list(SUBLIST case 1 -1 case_args)

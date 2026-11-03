@@ -879,12 +879,8 @@ bool /*true=printed*/ DtBlkFx::getParamDisplayGlobal(BlkFxParam::SplitParamNum& 
     }
 
     case OVERLAP: {
+      // DtBlkFix: Sync is always on, so only the overlap is shown
       bool printed = false;
-      if (_beat_sync_param.vstParamIdx() == OVERLAP && _beat_sync_param(v) > 0.5f ||
-          _param_sync_param.vstParamIdx() == OVERLAP && _param_sync_param(v) > 0.5f) {
-        text = text << "sync";
-        printed = true;
-      }
       if (_overlap_param.vstParamIdx() == OVERLAP) {
         int fft_len, time_len;
         guessFFTLen(/*return*/ fft_len, /*return*/ time_len);
@@ -1594,9 +1590,10 @@ inline void DtBlkFx::nextBlk()
 
   // get the next overlap param to see if blksync is on
 
-  // synchronize next blk to start-of-beat position if beat_sync
-  float beat_sync = get(&GetInterp, _beat_sync_param) * _samps_per_beat;
-  if (beat_sync > /*arbitrary*/ 16) {
+  // synchronize next blk to start-of-beat position
+  // DtBlkFix: always, whenever the host gives a song position (the Sync switch is always on); with
+  // no song position there are no beats to follow
+  if (_have_ppq && _samps_per_beat > /*arbitrary*/ 16) {
     // next blk sample position as determined from current overlap param
     long next_blk_samp_abs = _blk_samp_abs + _next_blk_fwd_n;
 

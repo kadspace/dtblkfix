@@ -112,6 +112,7 @@ bool /*success*/ GlobalCtrl::init(Gui* gui, CastCRect rect)
   _blksync->setSize(TileOffset(r, /*idx x*/ 4, /*idx y*/ 0));
   _blksync->setTag(BlkFxParam::OVERLAP);
   _blksync->setListener(this);
+  _blksync->setMouseEnabled(false); // DtBlkFix: Sync is always on
   AddView(_blksync, this);
 
   // block size
@@ -233,7 +234,7 @@ void GlobalCtrl::drawRect(CDrawContext* context, const CRect& update_rect_)
 
   // blk sync
   if (ShouldDrawView(update_rect, _blksync)) {
-    str << (_blksync->getTentativeValue() ? "on" : "off");
+    str << "on"; // DtBlkFix: Sync is always on
     temp_bm->setFontColor(_blksync->getState() == _blksync->INACTIVE ? normal_txt_col
                                                                      : focus_txt_col);
     OutlineDrawString(temp_bm, textRect(_blksync), str);
