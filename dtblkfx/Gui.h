@@ -57,10 +57,30 @@ struct GuiImages {
   Array<VstGuiRef<CContextRGBA>, 2> slider_bg, slider_knob; // index COARSE or FINE
 };
 
-// DtBlkFix: the UI size or skin was picked from a spectrogram menu
+// DtBlkFix: the UI size or skin was picked from a spectrogram menu, or the effect rows changed;
+// the editor should be reopened (afterwards, not from inside this call)
 class GuiViewListener {
 public:
   virtual void guiViewChange(int scale_pct, int skin_idx) = 0;
+};
+
+class Gui;
+
+//-----------------------------------------------------------------------------
+// DtBlkFix: the "+" row below the effects, adds an effect
+class FxAddRow : public CView {
+public:
+  FxAddRow();
+  void init(Gui* gui, CastCRect rect);
+
+  virtual void draw(CDrawContext* context);
+  virtual void drawRect(CDrawContext* context, const CRect& update_rect);
+  virtual CMouseEventResult onMouseDown(CPoint& mouse, const long& buttons);
+  virtual CMouseEventResult onMouseEntered(CPoint& mouse, const long& buttons);
+  virtual CMouseEventResult onMouseExited(CPoint& mouse, const long& buttons);
+
+  _Ptr<Gui> _gui;
+  bool _hover;
 };
 
 //-----------------------------------------------------------------------------
@@ -148,6 +168,32 @@ public: // DtBlkFix: UI scale and skin
 
   // Size & Skin submenus of the spectrogram menus
   Array<VstGuiRef<COptionMenu>, 2> _size_menu, _skin_menu;
+
+public: // DtBlkFix: only the effects in use get a row, with "+" to add one and "x" to remove one
+  // (only with a view listener; otherwise all 8 rows, as in the original)
+  bool editableRows() const { return _view_listener != NULL; }
+
+  // an effect slot is in use if any of its params isn't 0 (an untouched slot is all 0)
+  bool fxUsed(int fx_set);
+
+  // work out which rows to show and the editor size
+  void layoutRows();
+
+  // add an effect after the last one, remove one (the effects below move up)
+  void addFx();
+  void removeFx(int fx_set);
+
+  // override AEffGUIEditor: size depends on the rows
+  virtual bool getRect(ERect** rect);
+
+  // effect slots shown, in order
+  std::vector<int> _rows;
+  VstGuiRef<FxAddRow> _add_row;
+  bool _relayout_requested;
+
+protected:
+  void requestRelayout();
+  void setFxParams(int fx_set, const float* v /*NUM_FX_PARAMS*/);
 };
 
 #endif

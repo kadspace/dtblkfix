@@ -84,7 +84,18 @@ int main()
     std::unique_ptr<juce::AudioProcessorEditor> editor(b->createEditor());
     int w = 0, h = 0;
     b->engine().editorSize(150, w, h);
-    check(editor != nullptr && w == 615 && h == 614, "editor created for 615x614 pixels");
+    // one row per effect in use plus the "+" row
+    int rows = 0;
+    for (int fx = 0; fx < 8; fx++)
+      for (int i = 0; i < 5; i++)
+        if (b->engine().getParam(4 + 5 * fx + i) != 0.0f) {
+          rows++;
+          break;
+        }
+    int view_h = 26 + 191 + 24 * (rows + (rows < 8 ? 1 : 0));
+    check(editor != nullptr && w == 615 && h == (int)(view_h * 1.5f + 0.5f),
+          "editor created for 615x" + juce::String(h) + " pixels (" + juce::String(rows) +
+              " effects)");
   }
 
   printf("%s\n", g_failed ? "FAILED" : "all passed");

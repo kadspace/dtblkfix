@@ -56,7 +56,8 @@ public:
   // editor size & skin, saved in the state
   dtblkfix::ViewSettings view;
 
-  // called (on the message thread) when Size or Skin is picked in the editor
+  // called (on the message thread) to reopen the editor: Size or Skin picked, an effect added or
+  // removed, a new program or state
   std::function<void()> onViewChange;
 
 private: // EngineListener

@@ -153,6 +153,7 @@ void DtBlkFixProcessor::setCurrentProgram(int index)
   if (index < 0 || index >= getNumPrograms())
     return;
   _engine->setProgram(index);
+  triggerAsyncUpdate(); // the editor's effect rows follow the program
   updateHostDisplay(juce::AudioProcessorListener::ChangeDetails()
                         .withProgramChanged(true)
                         .withParameterInfoChanged(true));
@@ -184,10 +185,9 @@ void DtBlkFixProcessor::setStateInformation(const void* data, int size)
   _engine->setChunk(data, chunk_size, false);
   setLatencySamples(_engine->latency());
 
-  bool view_changed = new_view.scale_pct != view.scale_pct || new_view.skin != view.skin;
+  // reopen the editor: size, skin and effect rows may all have changed
   view = new_view;
-  if (view_changed)
-    triggerAsyncUpdate();
+  triggerAsyncUpdate();
   updateHostDisplay(juce::AudioProcessorListener::ChangeDetails()
                         .withProgramChanged(true)
                         .withParameterInfoChanged(true));
@@ -222,7 +222,7 @@ void DtBlkFixProcessor::latencyChanged()
 
 void DtBlkFixProcessor::viewChangeRequested(int scale_pct, int skin_idx)
 {
-  // called from inside the editor's own event handling: reopen it afterwards
+  // called from inside the editor's own event handling (Size, Skin, + or x): reopen it afterwards
   std::vector<std::string> skins = dtblkfix::Engine::skinNames();
   view.scale_pct = scale_pct;
   if (skin_idx >= 0 && skin_idx < (int)skins.size())

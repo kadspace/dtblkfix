@@ -114,6 +114,7 @@ int main(int argc, char** argv)
   std::vector<std::string> skins(1, "Original");
   int scales[] = {75, 100, 125, 150, 200};
   gui->setView(scale, images, skins, 0, std::vector<int>(scales, scales + 5), &listener);
+  gui->layoutRows(); // the effect rows in use decide the height
 
   // a window to hold the editor
   RECT r = {0, 0, gui->getScaledWidth(), gui->getScaledHeight()};

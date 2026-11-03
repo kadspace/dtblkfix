@@ -80,6 +80,7 @@ bool /*success*/ FxCtrl::init(Gui* gui, CastCRect rect, int fx_set)
 
   //
   _drag_both_state = DRAG_BOTH_INACTIVE;
+  _del_hover = false;
 
   // amp menu has not been built
   _amp_menu_mixmode = AMP_MENU_EMPTY;
@@ -393,6 +394,22 @@ void FxCtrl::drawRect(CDrawContext* context, const CRect& update_rect)
   fft_fx->dispVal(blkFx()->_fx1_0 + _fx_set, str, _fxval->getValue());
   OutlineDrawString(temp_bm, /*rect*/ _fxval, str, kCenterText);
 
+  // DtBlkFix: "x" to remove the effect while the row has the mouse
+  if (_gui->editableRows() && (active_ctrl || _drag_both_state || _del_hover)) {
+    CRect r = delRect();
+    for (int pass = 0; pass < 2; pass++) {
+      // dark outline, then the cross itself
+      temp_bm->setLineWidth(pass ? 1 : 3);
+      temp_bm->setFrameColor(pass ? (_del_hover ? focus_txt_col : normal_txt_col)
+                                  : CColorRGB(0, 0, 0));
+      temp_bm->moveTo(CPoint(r.left, r.top));
+      temp_bm->lineTo(CPoint(r.right, r.bottom));
+      temp_bm->moveTo(CPoint(r.left, r.bottom));
+      temp_bm->lineTo(CPoint(r.right, r.top));
+    }
+    temp_bm->setLineWidth(1);
+  }
+
   // copy into main drawing area
   CViewDrawContext dc(this);
   temp_bm->blend(&dc,
@@ -630,6 +647,14 @@ void FxCtrl::mouseInterceptBefore(Event::Args* args)
     return;
   Event::MouseArgs* mouse = (Event::MouseArgs*)args;
 
+  // DtBlkFix: click on the "x" removes this effect (the gui is then reopened without the row)
+  if (mouse->event_type == Event::kMouseDown && (mouse->buttons & kLButton) &&
+      _gui->editableRows() && delRect().pointInside(mouse->mouse)) {
+    _gui->removeFx(_fx_set);
+    mouse->result = kMouseEventHandled;
+    return;
+  }
+
   // update menus if need be
   if (mouse->event_type == Event::kMouseDown && mouse->buttons & kRButton) {
     if (mouse->src_view == _amp)
@@ -731,6 +756,14 @@ void FxCtrl::mouseInterceptAfter(Event::Args* args)
     setDirty();
   }
 
+  // DtBlkFix: is the mouse over the "x"?
+  bool del_hover = _gui->editableRows() && mouse->event_type != Event::kMouseExited &&
+                   delRect().pointInside(mouse->mouse);
+  if (del_hover != _del_hover) {
+    _del_hover = del_hover;
+    setDirty();
+  }
+
   // clr hilites if mouse exits any child control
   if (mouse->event_type == Event::kMouseExited) {
 
@@ -789,7 +822,7 @@ void FxCtrl::valueChanged(CControl* ctrl)
 
     // assume previous fx gui pane needs to be redrawn (in case 2 mask effects in a row were
     // selected or deselected)
-    if (_fx_set > 0)
+    if (_fx_set > 0 && _gui->_fx_ctrl[_fx_set - 1])
       _gui->_fx_ctrl[_fx_set - 1]->setDirty();
   }
 
@@ -829,4 +862,12 @@ void FxCtrl::setParameter(long index, float v)
       _fxval->setValue(v);
       break;
   }
+}
+
+//-------------------------------------------------------------------------------------------------
+CRect FxCtrl::delRect()
+// DtBlkFix: where the "x" is, in our coordinates (right end of the row)
+{
+  int w = getWidth(), h = getHeight();
+  return CRect(w - 15, h / 2 - 4, w - 7, h / 2 + 4);
 }

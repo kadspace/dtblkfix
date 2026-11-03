@@ -133,6 +133,10 @@ Engine::Engine(EngineListener* listener)
   memset(&impl->ti, 0, sizeof(impl->ti));
   impl->fx = new DtBlkFx(NULL);
   impl->fx->setHost(impl);
+
+  // the editor shows only the effects in use (+ and x), which needs the listener to resize
+  if (impl->fx->gui())
+    impl->fx->gui()->_view_listener = impl;
 }
 
 Engine::~Engine()

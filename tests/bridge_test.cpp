@@ -5,7 +5,10 @@
 // 1. State round trip: settings, programs, renamed program, editor size & skin come back, the
 //    state is the same bytes again and renders the same audio.
 // 2. A bare DtBlkFx chunk (as the VST2 version saves) loads with the default size & skin.
-// 3. The editor opens at every size & skin, at the right size.
+// 3. The editor opens at every size & skin, at the right size: one row per effect in use plus
+//    the "+" row.
+// 4. Clicking "+" adds a do-nothing filter after the last effect, clicking a row's "x" removes
+//    that effect and moves the ones below up.
 
 #define NOMINMAX
 #include <windows.h>
@@ -53,6 +56,35 @@ struct SkinSwitcher {
     e->idleEditor();
   }
 };
+
+// effect slots in use (any of the 5 params not 0), as the editor shows them
+static std::vector<int> usedFx(Engine& e)
+{
+  std::vector<int> used;
+  for (int fx = 0; fx < 8; fx++)
+    for (int i = 0; i < 5; i++)
+      if (e.getParam(4 + 5 * fx + i) != 0.0f) {
+        used.push_back(fx);
+        break;
+      }
+  return used;
+}
+
+// editor height in view units: global controls, spectrograms, effect rows and the "+" row
+static int editorHeight(Engine& e)
+{
+  int rows = (int)usedFx(e).size();
+  return 26 + 191 + 24 * (rows + (rows < 8 ? 1 : 0));
+}
+
+// a left click at view position (x, y) in the editor's window
+static void click(HWND frame, int x, int y)
+{
+  LPARAM pos = MAKELPARAM(x, y);
+  SendMessage(frame, WM_MOUSEMOVE, 0, pos);
+  SendMessage(frame, WM_LBUTTONDOWN, MK_LBUTTON, pos);
+  SendMessage(frame, WM_LBUTTONUP, 0, pos);
+}
 
 static std::vector<float> render(Engine& e, SkinSwitcher* switcher = nullptr)
 {
@@ -166,9 +198,55 @@ int main()
                (int)r.right,
                (int)r.bottom);
       check(opened && r.right == w && r.bottom == h &&
-                abs(w - (int)floor(410 * scale / 100.0 + 0.5)) <= 1,
+                abs(w - (int)floor(410 * scale / 100.0 + 0.5)) <= 1 &&
+                abs(h - (int)floor(editorHeight(a) * scale / 100.0 + 0.5)) <= 1,
             what);
     }
+  }
+
+  // --- 4. "+" and "x"
+  {
+    Engine e(&listener);
+    e.setProgram(33); // Vocode
+    std::vector<int> before = usedFx(e);
+    float first[5];
+    for (int i = 0; i < 5; i++)
+      first[i] = e.getParam(4 + 5 * before[1] + i);
+
+    int w = 0, h = 0;
+    e.editorSize(100, w, h);
+    HWND wnd = (HWND)e.createEditorWindow(w, h);
+    e.openEditor(wnd, 100, 0);
+    HWND frame = GetWindow(wnd, GW_CHILD);
+    check(h == editorHeight(e), "editor: one row per effect in use and a + row");
+
+    // "+" is the row after the effects
+    click(frame, 205, 217 + 24 * (int)before.size() + 12);
+    std::vector<int> added = usedFx(e);
+    int slot = before.back() + 1;
+    check(added.size() == before.size() + 1 && added.back() == slot &&
+              e.getParam(4 + 5 * slot + 0) == 0.0f && e.getParam(4 + 5 * slot + 1) == 1.0f &&
+              e.getParam(4 + 5 * slot + 2) == 0.6f,
+          "+ adds a full range 0 dB filter after the last effect");
+
+    // the wrapper reopens the editor after a change
+    e.closeEditor();
+    e.openEditor(wnd, 100, 0);
+    frame = GetWindow(wnd, GW_CHILD);
+    RECT r;
+    GetClientRect(frame, &r);
+    check(r.bottom == editorHeight(e), "the editor grows by a row");
+
+    // "x" on the first row
+    click(frame, 410 - 11, 217 + 12);
+    std::vector<int> removed = usedFx(e);
+    bool moved_up = removed.size() == before.size();
+    for (int i = 0; i < 5; i++)
+      moved_up = moved_up && e.getParam(4 + i) == first[i];
+    check(moved_up, "x removes the effect and the ones below move up");
+
+    e.closeEditor();
+    DestroyWindow(wnd);
   }
 
   printf("%s\n", g_failed ? "FAILED" : "all passed");

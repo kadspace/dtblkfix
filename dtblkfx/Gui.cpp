@@ -141,16 +141,14 @@ Gui::Gui(AudioEffect* effect)
   _scale = 1.0f;
   _skin_idx = 0;
   _view_listener = NULL;
+  _relayout_requested = false;
 
   /*AEffGUIEditor*/ frame = 0;
 
   /*AEffGUIEditor::rect*/
   rect.left = 0;
   rect.top = 0;
-  rect.right = (VstInt16)_images.glob_bg->getWidth();
-  rect.bottom =
-      (VstInt16)(_images.glob_bg->getHeight() + _images.splash_bg->getHeight() + // spectrograms
-                 _images.fx_bg->getHeight() / 5 * BlkFxParam::NUM_FX_SETS);
+  layoutRows(); // DtBlkFix: rect.right & rect.bottom
 
   // build the colour gradient map for the spectrograms, each 5 element array
   // contains: position (0..1), R, G, B, A
@@ -313,9 +311,13 @@ bool Gui::open(void* system_window)
 
   LOGG("", "Gui::open" << VAR(this) << VAR(system_window));
 
-  CRect frame_rect(0, 0, rect.right, rect.bottom);
-
   _ok = false;
+
+  // DtBlkFix: rows shown & size
+  layoutRows();
+  _relayout_requested = false;
+
+  CRect frame_rect(0, 0, rect.right, rect.bottom);
 
   AEffGUIEditor::open(system_window);
 
@@ -368,11 +370,17 @@ bool Gui::open(void* system_window)
   _sgram[1]->linkSgram(_sgram[0]);
 
   // create fx ctrls
+  // DtBlkFix: only for the rows shown, then the "+" row if there's room for another effect
   CRect fx_rect = GetTile(_images.fx_bg, /*num x*/ 1, /*num y*/ 5);
-  for (i = 0; i < BlkFxParam::NUM_FX_SETS; i++) {
+  for (int j = 0; j < (int)_rows.size(); j++) {
+    i = _rows[j];
     NewView(_fx_ctrl[i], frame);
     _fx_ctrl[i]->init(/*gui*/ this, /*size*/ Offset(p, fx_rect), i);
     p.y += fx_rect.height();
+  }
+  if (editableRows() && (int)_rows.size() < BlkFxParam::NUM_FX_SETS) {
+    NewView(_add_row, frame);
+    _add_row->init(this, Offset(p, fx_rect));
   }
 
   _ok = true;
@@ -546,6 +554,7 @@ void Gui::close()
   // release these things
   _sgram[0] = NULL;
   _sgram[1] = NULL;
+  _add_row = NULL;
   _glob_ctrl = NULL;
   for (int i = 0; i < BlkFxParam::NUM_FX_SETS; i++)
     _fx_ctrl[i] = NULL;
@@ -576,6 +585,16 @@ void Gui::idle()
   // inject these events so that we can catch the mouse leaving the window
   GenerateMouseMoved(frame);
 
+  // DtBlkFix: an effect that came into use (automation, the host) gets a row
+  if (editableRows() && !_relayout_requested) {
+    for (int i = 0; i < BlkFxParam::NUM_FX_SETS; i++) {
+      if (!_fx_ctrl[i] && fxUsed(i)) {
+        requestRelayout();
+        break;
+      }
+    }
+  }
+
   // update the spectrograms
   CViewDrawContext dc(frame);
   for (int i = 0; i < 2; i++) {
@@ -599,7 +618,7 @@ void Gui::setParameter(long index, float v)
   if (p.glob_param >= 0)
     _glob_ctrl->setParameter(p.glob_param, v);
 
-  else if (p.fx_param >= 0 && idx_within(p.fx_set, _fx_ctrl))
+  else if (p.fx_param >= 0 && idx_within(p.fx_set, _fx_ctrl) && _fx_ctrl[p.fx_set])
     _fx_ctrl[p.fx_set]->setParameter(p.fx_param, v);
 }
 
@@ -637,4 +656,207 @@ void Gui::valueChanged(CControl* ctrl)
   // update sgram
   if (withinRng(sel, g_sgram_menu_strings))
     _sgram[i]->setName(g_sgram_menu_strings[sel]);
+}
+
+//*************************************************************************************************
+// DtBlkFix: effect rows
+//*************************************************************************************************
+
+//-------------------------------------------------------------------------------------------------
+bool Gui::fxUsed(int fx_set)
+{
+  int offs = BlkFxParam::paramOffs(fx_set);
+  for (int i = 0; i < BlkFxParam::NUM_FX_PARAMS; i++)
+    if (blkFx()->getCurrParam(offs + i) != 0.0f)
+      return true;
+  return false;
+}
+
+//-------------------------------------------------------------------------------------------------
+void Gui::layoutRows()
+// fill in _rows and the editor size
+{
+  _rows.clear();
+  for (int i = 0; i < BlkFxParam::NUM_FX_SETS; i++)
+    if (!editableRows() || fxUsed(i))
+      _rows.push_back(i);
+
+  int n_rows = (int)_rows.size();
+  if (editableRows() && n_rows < BlkFxParam::NUM_FX_SETS)
+    n_rows++; // "+" row
+
+  rect.right = (VstInt16)_images.glob_bg->getWidth();
+  rect.bottom = (VstInt16)(_images.glob_bg->getHeight() + _images.splash_bg->getHeight() +
+                           _images.fx_bg->getHeight() / 5 * n_rows);
+}
+
+//-------------------------------------------------------------------------------------------------
+bool Gui::getRect(ERect** ppRect)
+// virtual, override AEffGUIEditor
+{
+  if (!_ok)
+    layoutRows();
+  return AEffGUIEditor::getRect(ppRect);
+}
+
+//-------------------------------------------------------------------------------------------------
+void Gui::requestRelayout()
+{
+  _relayout_requested = true;
+  if (_view_listener)
+    _view_listener->guiViewChange(RndToInt(_scale * 100.0f), _skin_idx);
+}
+
+//-------------------------------------------------------------------------------------------------
+void Gui::setFxParams(int fx_set, const float* v)
+// set an effect's params as if changed in the editor (the host is told)
+{
+  int offs = BlkFxParam::paramOffs(fx_set);
+  for (int i = 0; i < BlkFxParam::NUM_FX_PARAMS; i++) {
+    if (blkFx()->getCurrParam(offs + i) == v[i])
+      continue;
+    blkFx()->beginEdit(offs + i);
+    blkFx()->setParameterAutomated(offs + i, v[i]);
+    blkFx()->endEdit(offs + i);
+  }
+}
+
+//-------------------------------------------------------------------------------------------------
+void Gui::addFx()
+// add a do-nothing filter (full range at 0dB) after the last effect
+{
+  enum { N = BlkFxParam::NUM_FX_SETS, P = BlkFxParam::NUM_FX_PARAMS };
+
+  int last = -1;
+  for (int i = 0; i < N; i++)
+    if (fxUsed(i))
+      last = i;
+
+  // the last slot is taken: move the effects up over the unused slots first
+  if (last == N - 1) {
+    float v[N][P];
+    int n = 0;
+    for (int i = 0; i < N; i++) {
+      if (!fxUsed(i))
+        continue;
+      for (int j = 0; j < P; j++)
+        v[n][j] = blkFx()->getCurrParam(BlkFxParam::paramOffs(i) + j);
+      n++;
+    }
+    if (n == N)
+      return; // all 8 in use
+    for (int i = 0; i < N; i++) {
+      if (i >= n)
+        memset(v[i], 0, sizeof(v[i]));
+      setFxParams(i, v[i]);
+    }
+    last = n - 1;
+  }
+
+  float add[P];
+  add[BlkFxParam::FX_FREQ_A] = 0.0f;
+  add[BlkFxParam::FX_FREQ_B] = 1.0f;
+  add[BlkFxParam::FX_AMP] = BlkFxParam::getAmpParam0dB();
+  add[BlkFxParam::FX_TYPE] = BlkFxParam::getEffectTypeInv(0); // Filter
+  add[BlkFxParam::FX_VAL] = 0.0f;
+  setFxParams(last + 1, add);
+
+  requestRelayout();
+}
+
+//-------------------------------------------------------------------------------------------------
+void Gui::removeFx(int fx_set)
+// remove an effect: the ones below move up so that the chain stays as shown
+{
+  enum { N = BlkFxParam::NUM_FX_SETS, P = BlkFxParam::NUM_FX_PARAMS };
+  if (fx_set < 0 || fx_set >= N)
+    return;
+
+  for (int i = fx_set; i < N; i++) {
+    float v[P];
+    for (int j = 0; j < P; j++)
+      v[j] = i + 1 < N ? blkFx()->getCurrParam(BlkFxParam::paramOffs(i + 1) + j) : 0.0f;
+    setFxParams(i, v);
+  }
+
+  requestRelayout();
+}
+
+//-------------------------------------------------------------------------------------------------
+FxAddRow::FxAddRow()
+    : CView(CRect(0, 0, 0, 0))
+{
+  _hover = false;
+}
+
+//-------------------------------------------------------------------------------------------------
+void FxAddRow::init(Gui* gui, CastCRect rect)
+{
+  _gui = gui;
+  /*CView::*/ size = rect;
+  /*CView::*/ mouseableArea = rect;
+  _hover = false;
+}
+
+//-------------------------------------------------------------------------------------------------
+void FxAddRow::draw(CDrawContext* context)
+{
+  drawRect(context, size);
+}
+
+//-------------------------------------------------------------------------------------------------
+void FxAddRow::drawRect(CDrawContext* context, const CRect& update_rect)
+// an empty effect row (row-selected look when hovered) with a "+" in the middle
+{
+  setDirty(false);
+  CContextRGBA* temp_bm = &_gui->_temp_bm;
+  temp_bm->setClipRect(MoveToOrigin(this));
+
+  CRect bg_img_rect = GetTile(_gui->_images.fx_bg, /*num x*/ 1, /*num y*/ 5, 0, 0);
+  _gui->_images.fx_bg->blend(/*dest*/ temp_bm,
+                             /*dest*/ CPoint(0, 0),
+                             /*src rect*/ TileOffset(bg_img_rect, 0, _hover ? 1 : 0),
+                             /*alpha*/ 255,
+                             /*use src alpha*/ false);
+
+  // a "+" drawn like the rows' "x": dark outline, then the cross
+  CPoint c(getWidth() / 2, getHeight() / 2);
+  for (int pass = 0; pass < 2; pass++) {
+    temp_bm->setLineWidth(pass ? 1 : 3);
+    temp_bm->setFrameColor(
+        pass ? (_hover ? CColorRGB(0xff, 0x80, 0x80) : CColorRGB(0xff, 0xff, 0xff))
+             : CColorRGB(0, 0, 0));
+    temp_bm->moveTo(CPoint(c.x - 6, c.y));
+    temp_bm->lineTo(CPoint(c.x + 6, c.y));
+    temp_bm->moveTo(CPoint(c.x, c.y - 6));
+    temp_bm->lineTo(CPoint(c.x, c.y + 6));
+  }
+  temp_bm->setLineWidth(1);
+
+  CViewDrawContext dc(this);
+  temp_bm->blend(&dc, /*dst rect*/ this, /*src point*/ CPoint(0, 0), 255, /*src alpha*/ false);
+}
+
+//-------------------------------------------------------------------------------------------------
+CMouseEventResult FxAddRow::onMouseDown(CPoint& mouse, const long& buttons)
+{
+  if (buttons & kLButton)
+    _gui->addFx();
+  return kMouseEventHandled;
+}
+
+//-------------------------------------------------------------------------------------------------
+CMouseEventResult FxAddRow::onMouseEntered(CPoint& mouse, const long& buttons)
+{
+  _hover = true;
+  setDirty();
+  return kMouseEventHandled;
+}
+
+//-------------------------------------------------------------------------------------------------
+CMouseEventResult FxAddRow::onMouseExited(CPoint& mouse, const long& buttons)
+{
+  _hover = false;
+  setDirty();
+  return kMouseEventHandled;
 }
