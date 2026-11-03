@@ -29,8 +29,9 @@ foreach(fwd
   endif()
 endforeach()
 
-set(DTBLKFIX_ENGINE_DEFS WIN32 _WINDOWS WINDOWS=1 STEREO NOMINMAX _CRT_SECURE_NO_DEPRECATE
-    _CRT_SECURE_NO_WARNINGS)
+# _HAS_AUTO_PTR_ETC: the engine uses std::auto_ptr, which MSVC's library drops from C++17 on
+set(DTBLKFIX_ENGINE_DEFS WIN32 _WINDOWS WINDOWS=1 STEREO NOMINMAX _CRT_SECURE_NO_WARNINGS
+    _HAS_AUTO_PTR_ETC=1)
 
 function(dtblkfix_engine_options target)
   target_compile_definitions(${target} PRIVATE ${DTBLKFIX_ENGINE_DEFS})
