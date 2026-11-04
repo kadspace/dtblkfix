@@ -8,8 +8,8 @@
 // 3. The editor opens at every size in the menu, a size dragged to and the largest, in every skin
 //    & style, at the right size: one row per effect in use plus the "+" row.
 // 4. In both styles, clicking "+" adds a do-nothing filter after the last effect, clicking a
-//    row's "x" removes that effect and moves the ones below up, and the header's next & previous
-//    buttons load the next & previous presets.
+//    row's "x" removes that effect and moves the ones below up, the header's next & previous
+//    buttons load the next & previous presets, and its gear opens & closes the settings page.
 
 #define NOMINMAX
 #include <windows.h>
@@ -40,9 +40,9 @@ struct NoListener : public EngineListener {
   void beginEdit(int) override {}
   void endEdit(int) override {}
   void latencyChanged() override {}
-  void viewChangeRequested(int, int, int) override {}
+  void viewChangeRequested(int, int, int) override { view_changes++; }
   void programChangedByEditor() override { program_changes++; }
-  int program_changes = 0;
+  int program_changes = 0, view_changes = 0;
 };
 
 // optional: switch the editor's skin every 20 buffers while rendering
@@ -228,7 +228,7 @@ int main()
     a.openEditor(wnd, 150, dark, 1);
     uint32_t background = 0, label = 0;
     bool colours = a.editorColours(background, label);
-    Engine::setEditorWindowCorner(wnd, w, h, 21);
+    Engine::setEditorWindowCorner(wnd, w, h, 21, 21);
     HRGN rgn = CreateRectRgn(0, 0, 0, 0);
     bool hole = GetWindowRgn(wnd, rgn) != ERROR && !PtInRegion(rgn, w - 5, h - 5) &&
                 !PtInRegion(rgn, w - 21, h - 21) && PtInRegion(rgn, w - 22, h - 5) &&
@@ -286,16 +286,36 @@ int main()
 
     // the header's next & previous preset buttons load the program and tell the wrapper
     int changes = listener.program_changes;
-    click(frame, 213, 11);
+    click(frame, 274, 11);
     Engine ref(&listener);
     ref.setProgram(34);
     bool loaded = true;
     for (int i = 0; i < e.numParams(); i++)
       loaded = loaded && e.getParam(i) == ref.getParam(i);
     bool next_ok = e.getProgram() == 34 && loaded && listener.program_changes == changes + 1;
-    click(frame, 13, 11);
+    click(frame, 253, 11);
     check(next_ok && e.getProgram() == 33 && listener.program_changes == changes + 2,
           "header: next preset, then previous");
+
+    // the gear opens the settings page in place of the spectrograms (the wrapper reopens the
+    // editor), and closes it again
+    int views = listener.view_changes;
+    click(frame, 396, 11);
+    bool asked = listener.view_changes == views + 1;
+    e.closeEditor();
+    e.openEditor(wnd, 100, 0, style);
+    frame = GetWindow(wnd, GW_CHILD);
+    for (int i = 0; i < 5; i++)
+      e.idleEditor();
+    RECT pr;
+    GetClientRect(frame, &pr);
+    click(frame, 396, 11);
+    e.closeEditor();
+    e.openEditor(wnd, 100, 0, style);
+    frame = GetWindow(wnd, GW_CHILD);
+    e.idleEditor();
+    check(asked && listener.view_changes == views + 2 && pr.bottom == editorHeight(e),
+          "header: the gear opens the settings page and closes it");
 
     e.closeEditor();
     DestroyWindow(wnd);

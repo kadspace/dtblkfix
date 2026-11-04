@@ -1,5 +1,7 @@
 #include <StdAfx.h>
 
+#include <math.h>
+
 #include "VstGuiSupport.h"
 
 // define these
@@ -231,6 +233,52 @@ void DrawArrow(CDrawContext* context, float x, float y, float size, int dir, con
   SelectObject(dc, old_brush);
   SelectObject(dc, old_pen);
   DeleteObject(brush);
+  if (advanced)
+    SetWorldTransform(dc, &old_xf);
+#endif
+}
+
+//-------------------------------------------------------------------------------------------------
+void DrawGear(CDrawContext* context, float x, float y, float size, const CColor& col,
+              const CColor& hole_col)
+{
+#ifdef _WIN32
+  // like DrawArrow: in hundredths of a view unit under a scaled world transform
+  HDC dc = (HDC)context->getSystemContext();
+  XFORM old_xf;
+  bool advanced = GetGraphicsMode(dc) == GM_ADVANCED && GetWorldTransform(dc, &old_xf);
+  float k = 0.01f;
+  if (advanced) {
+    XFORM f = {k, 0, 0, k, 0, 0};
+    ModifyWorldTransform(dc, &f, MWT_LEFTMULTIPLY);
+  }
+  else
+    k = 1.0f;
+  float ox = (x + (float)context->offset.h) / k, oy = (y + (float)context->offset.v) / k;
+  float r_out = size * 0.5f / k, r_in = r_out * 0.72f, r_hole = r_out * 0.32f;
+
+  // 8 teeth: each a flat top on the outer radius and a flat valley on the inner one
+  const int teeth = 8;
+  POINT pts[teeth * 4];
+  for (int t = 0; t < teeth; t++) {
+    float a = (float)t * 6.2831853f / (float)teeth, half = 3.1415927f / (float)teeth;
+    float angs[4] = {a - half * 0.45f, a + half * 0.45f, a + half * 0.75f, a + half * 1.55f};
+    float rads[4] = {r_out, r_out, r_in, r_in};
+    for (int j = 0; j < 4; j++) {
+      pts[t * 4 + j].x = (LONG)(ox + rads[j] * cosf(angs[j]));
+      pts[t * 4 + j].y = (LONG)(oy + rads[j] * sinf(angs[j]));
+    }
+  }
+  HBRUSH brush = CreateSolidBrush(RGB(col.red, col.green, col.blue));
+  HBRUSH hole = CreateSolidBrush(RGB(hole_col.red, hole_col.green, hole_col.blue));
+  HGDIOBJ old_brush = SelectObject(dc, brush), old_pen = SelectObject(dc, GetStockObject(NULL_PEN));
+  Polygon(dc, pts, teeth * 4);
+  SelectObject(dc, hole);
+  Ellipse(dc, (int)(ox - r_hole), (int)(oy - r_hole), (int)(ox + r_hole), (int)(oy + r_hole));
+  SelectObject(dc, old_brush);
+  SelectObject(dc, old_pen);
+  DeleteObject(brush);
+  DeleteObject(hole);
   if (advanced)
     SetWorldTransform(dc, &old_xf);
 #endif

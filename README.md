@@ -8,10 +8,10 @@ DtBlkFx is Darrell Tam's FFT effect from 2005–2006: up to eight spectral effec
 
 - **Timing.** DtBlkFx delayed its output by one block but told the host its latency was zero, so at the default settings everything came out a beat late. DtBlkFix always delays by exactly one block and reports it, so the host compensates for it, and the Delay control is gone.
 - **Song sync.** DtBlkFx checked the song position about once a beat, and only with Sync on, so after a loop, a jump or a tempo change the blocks drifted off the beat, and where they landed depended on the host's buffer size. In DtBlkFix, Sync is always on, so its control is gone, and blocks follow the song position on every buffer: a block starts on every beat, right after a loop or jump, at any buffer size. With no song position, there's no beat to follow.
-- **Window size.** The original is a fixed 410 by 409 pixel window, which is tiny on a modern screen. In DtBlkFix you drag its bottom right corner to any size from 75 to 300%, or pick 75, 100, 125, 150 or 200% from a menu. Text and lines are drawn at the new size, so it stays sharp.
+- **Window size.** The original is a fixed 410 by 409 pixel window, which is tiny on a modern screen. In DtBlkFix you drag the window to any size and shape, and the editor scales to fill it (from 75 to 300%), or you pick 75, 100, 125, 150 or 200% in the settings. Text and lines are drawn at the new size, so it stays sharp.
 - **Skins.** The original look, plus Dark and Warm. A skin is just the folder of images the plugin already loads, so you can make your own.
 - **Easier to read.** Style **Boxes** puts each value in a box, in the top strip and the effect rows. **Original** keeps DtBlkFx's outlined text.
-- **Presets and settings at the top.** A bar across the top of the editor shows the preset: ◀ and ▶ step through the presets, and clicking its name lists them all. **Settings** next to it has Size, Skin (Original, Dark, Warm) and Style.
+- **Presets and settings at the top.** A bar across the top of the editor shows the preset: its number, its name (click it for the list), and ← → for the previous and next. The gear at the right opens the settings: Size, Skin (Original, Dark, Warm) and Style.
 - **Effect rows.** The original always showed eight effect rows, most of them empty. DtBlkFix shows only the effects in use. **+** below them adds one, and the **×** at the left end of a row removes it.
 - **Format.** DtBlkFix is a 64-bit VST3.
 
@@ -31,7 +31,7 @@ The bar at the top shows the preset. Click ◀ or ▶ for the previous or next o
 
 Each row is an effect, run in order from the top. Click **+** below the last row to add one: it starts as a Filter over the whole range at 0 dB, which leaves the sound alone until you change it. Hover over a row and click the **×** at its left end to remove it; the effects below move up. An effect counts as in use if any of its settings isn't zero, which is what an empty slot is in the presets.
 
-Drag the bottom right corner of the window to resize it; the editor redraws at the new size when you let go. **Settings**, at the top right, has **Size**, **Skin** (Original, Dark or Warm) and **Style** (Original, or Boxes, which is easier to read). Size, skin and style are saved with the plugin's state.
+Drag the bottom right corner (or the window's edge, if your DAW allows it) to any size and shape: the editor scales to the largest size that fits, and redraws sharp when you stop. The gear at the top right opens the settings in place of the spectrograms: **Size**, **Skin** (Original, Dark or Warm) and **Style** (Original, or Boxes, which is easier to read). A change applies straight away; click the gear again to go back. Size, skin and style are saved with the plugin's state.
 
 To make a skin, copy the `stereo_*.png` files from `DtBlkFix.vst3\Contents\Resources\dtblkfx` into a new folder in `dtblkfx\skins`, keep their sizes, and edit them. The folder's name is the skin's name. The Dark and Warm skins are made from the originals by [`tools/make_skins.py`](tools/make_skins.py).
 

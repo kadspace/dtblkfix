@@ -142,6 +142,7 @@ Gui::Gui(AudioEffect* effect)
   _skin_idx = 0;
   _style = GUI_STYLE_ORIGINAL;
   _view_listener = NULL;
+  _settings_open = false;
   _relayout_requested = false;
 
   /*AEffGUIEditor*/ frame = 0;
@@ -202,35 +203,11 @@ void Gui::makePalette()
 }
 
 //-------------------------------------------------------------------------------------------------
-void Gui::addViewMenus(COptionMenu* menu)
-// DtBlkFix: Size, Skin & Style submenus, picked in valueChanged()
+void Gui::toggleSettings()
+// DtBlkFix: the listener reopens us, with the settings page or the spectrograms
 {
-  CharArray<32> str;
-  _size_menu.setNew(new COptionMenu(CRect(0, 0, 0, 0), this, SIZE_MENU_ID));
-  _size_menu->setStyle(kCheckStyle);
-  int curr_scale = -1; // a size dragged to isn't in the menu
-  for (int j = 0; j < (int)_scales_pct.size(); j++) {
-    str << _scales_pct[j] << "%";
-    _size_menu->addEntry(str, j);
-    if (_scales_pct[j] == RndToInt(_scale * 100.0f))
-      curr_scale = j;
-  }
-  _size_menu->setCurrent(curr_scale);
-  menu->addEntry(_size_menu, "Size");
-
-  _skin_menu.setNew(new COptionMenu(CRect(0, 0, 0, 0), this, SKIN_MENU_ID));
-  _skin_menu->setStyle(kCheckStyle);
-  for (int j = 0; j < (int)_skin_names.size(); j++)
-    _skin_menu->addEntry(_skin_names[j].c_str(), j);
-  _skin_menu->setCurrent(_skin_idx);
-  menu->addEntry(_skin_menu, "Skin");
-
-  _style_menu.setNew(new COptionMenu(CRect(0, 0, 0, 0), this, STYLE_MENU_ID));
-  _style_menu->setStyle(kCheckStyle);
-  _style_menu->addEntry("Original", GUI_STYLE_ORIGINAL);
-  _style_menu->addEntry("Boxes (easier to read)", GUI_STYLE_BOXES);
-  _style_menu->setCurrent(_style);
-  menu->addEntry(_style_menu, "Style");
+  _settings_open = !_settings_open;
+  requestRelayout();
 }
 
 //-------------------------------------------------------------------------------------------------
@@ -413,6 +390,8 @@ bool Gui::open(void* system_window)
   p.y += globHeight();
 
   // place spectrograms
+  // DtBlkFix: with the settings page on top of them while it's open (they stop drawing then)
+  CRect sgram_area(p.x, p.y, p.x + _images.glob_bg->getWidth(), p.y + _images.splash_bg->getHeight());
   for (i = 0; i < 2; i++)
     if (!openSgram(i, &p))
       return false;
@@ -432,6 +411,10 @@ bool Gui::open(void* system_window)
   if (editableRows() && (int)_rows.size() < BlkFxParam::NUM_FX_SETS) {
     NewView(_add_row, frame);
     _add_row->init(this, Offset(p, fx_rect));
+  }
+  if (editableRows() && _settings_open) {
+    NewView(_settings_page, frame);
+    _settings_page->init(this, sgram_area);
   }
 
   _ok = true;
@@ -646,7 +629,10 @@ void Gui::idle()
     }
   }
 
-  // update the spectrograms
+  // update the spectrograms (DtBlkFix: not while the settings page is over them: they draw
+  // straight onto the window)
+  if (_settings_open && _settings_page)
+    return;
   CViewDrawContext dc(frame);
   for (int i = 0; i < 2; i++) {
     OffsetDrawContext(&dc, _sgram[i]);
@@ -923,9 +909,109 @@ CMouseEventResult FxAddRow::onMouseExited(CPoint& mouse, const long& buttons)
 // DtBlkFix: the header
 //*************************************************************************************************
 
-// where things are in the header (view units, the header is 410 x 22)
-static const CRect g_head_prev(4, 3, 22, 19), g_head_name(25, 3, 201, 19), g_head_next(204, 3, 222, 19);
-static const int HEAD_SETTINGS_W = 78; // the Settings box, at the right
+// where things are in the header (view units, the header is 410 x 22): the preset's number, its
+// name (a list), previous & next, and the gear at the right
+static const CRect g_head_num(4, 3, 42, 19), g_head_name(45, 3, 241, 19),
+    g_head_prev(244, 3, 262, 19), g_head_next(265, 3, 283, 19);
+static const int HEAD_GEAR_W = 20;
+
+//-------------------------------------------------------------------------------------------------
+// DtBlkFix: the settings page
+//-------------------------------------------------------------------------------------------------
+
+// rows of the page (view units, relative to it): label at the left, the value's box beside it
+static const int PAGE_ROW_Y0 = 40, PAGE_ROW_DY = 34, PAGE_ROW_H = 20;
+static const int PAGE_LABEL_X = 110, PAGE_BOX_X0 = 160, PAGE_BOX_X1 = 300;
+
+static CRect PageBox(int row)
+{
+  int y = PAGE_ROW_Y0 + row * PAGE_ROW_DY;
+  return CRect(PAGE_BOX_X0, y, PAGE_BOX_X1, y + PAGE_ROW_H);
+}
+
+SettingsPage::SettingsPage()
+    : CViewContainer(CRect(), /*frame*/ NULL, /*background*/ NULL)
+{
+}
+
+//-------------------------------------------------------------------------------------------------
+void SettingsPage::init(Gui* gui, CastCRect rect)
+{
+  /*CView::*/ size = rect;
+  /*CView::*/ mouseableArea = rect;
+  _gui = gui;
+  CharArray<32> str;
+  static const long tags[3] = {SIZE_MENU_ID, SKIN_MENU_ID, STYLE_MENU_ID};
+  for (int i = 0; i < 3; i++) {
+    _menu[i].New();
+    _menu[i]->setSize(PageBox(i));
+    _menu[i]->setTag(tags[i]);
+    _menu[i]->setListener(_gui); // Gui::valueChanged applies it
+  }
+  int scale_pct = RndToInt(_gui->_scale * 100.0f), curr = -1;
+  for (int j = 0; j < (int)_gui->_scales_pct.size(); j++) {
+    str << _gui->_scales_pct[j] << "%";
+    _menu[0]->addEntry(str, j);
+    if (_gui->_scales_pct[j] == scale_pct)
+      curr = j;
+  }
+  _menu[0]->setCurrent(curr);
+  for (int j = 0; j < (int)_gui->_skin_names.size(); j++)
+    _menu[1]->addEntry(_gui->_skin_names[j].c_str(), j);
+  _menu[1]->setCurrent(_gui->_skin_idx);
+  _menu[2]->addEntry("Original", GUI_STYLE_ORIGINAL);
+  _menu[2]->addEntry("Boxes", GUI_STYLE_BOXES);
+  _menu[2]->setCurrent(_gui->_style);
+  for (int i = 0; i < 3; i++)
+    AddView(_menu[i], this);
+}
+
+//-------------------------------------------------------------------------------------------------
+void SettingsPage::draw(CDrawContext* context)
+{
+  drawRect(context, size);
+}
+
+//-------------------------------------------------------------------------------------------------
+void SettingsPage::drawRect(CDrawContext* context, const CRect& update_rect_)
+// straight onto the window (in its coordinates): the page is plain, so it doesn't flicker
+{
+  CRect update_rect = Bound(update_rect_, this);
+  setDirty(false);
+  const GuiPalette& pal = _gui->_palette;
+  CPoint o = TopLeft(this);
+  int w = getWidth(), h = getHeight();
+  context->setClipRect(update_rect);
+
+  // the global controls' plain background
+  CContextRGBA* bg = _gui->_images.glob_bg;
+  for (int y = 0; y < h; y += 5)
+    bg->blend(context, Offset(o, CRect(0, y, w, std::min(y + 5, h))), CPoint(0, 21), 255, false);
+
+  const char* labels[3] = {"Size", "Skin", "Style"};
+  CharArray<32> value;
+  for (int i = 0; i < 3; i++) {
+    CRect r = Offset(o, PageBox(i));
+    bool hot = _menu[i]->getState() != _menu[i]->INACTIVE;
+    context->setFont(kNormalFont, /*sz*/ 11, kNormalFace);
+    context->setFontColor(pal.label);
+    context->drawString(labels[i], CRect(o.x + PAGE_LABEL_X, r.top, r.left - 6, r.bottom), 0, kLeftText);
+    DrawBox(context, r, pal.box, hot ? pal.hover : pal.box_line);
+    if (i == 0)
+      value << RndToInt(_gui->_scale * 100.0f) << "%";
+    else if (i == 1)
+      value << (idx_within(_gui->_skin_idx, _gui->_skin_names)
+                    ? _gui->_skin_names[_gui->_skin_idx].c_str()
+                    : "");
+    else
+      value << (_gui->boxes() ? "Boxes" : "Original");
+    context->setFont(kNormalFont, /*sz*/ 11, kBoldFace);
+    context->setFontColor(hot ? pal.hover : pal.value);
+    context->drawString(value, CRect(r.left + 8, r.top, r.right - 14, r.bottom), 0, kLeftText);
+    DrawArrow(context, (float)r.right - 8.0f, (float)(r.top + r.bottom) * 0.5f, 7.0f, 0,
+              hot ? pal.hover : pal.label);
+  }
+}
 
 //-------------------------------------------------------------------------------------------------
 HeaderButton::HeaderButton(HeaderCtrl* header, int step)
@@ -944,8 +1030,12 @@ void HeaderButton::setSize(CastCRect r)
 
 CMouseEventResult HeaderButton::onMouseDown(CPoint& mouse, const long& buttons)
 {
-  if (buttons & kLButton)
-    _header->step(_step);
+  if (buttons & kLButton) {
+    if (_step)
+      _header->step(_step);
+    else
+      _header->_gui->toggleSettings();
+  }
   return kMouseEventHandled;
 }
 
@@ -1022,12 +1112,9 @@ void HeaderCtrl::init(Gui* gui, CastCRect rect)
   _preset_menu->setCurrent(fx->getProgram());
   AddView(_preset_menu, this);
 
-  _settings_menu.New();
-  _settings_menu->setSize(CRect(r.right - 4 - HEAD_SETTINGS_W, 3, r.right - 4, 19));
-  _settings_menu->setListener(this);
-  _settings_menu->setStyle(0); // no check marks
-  _gui->addViewMenus(_settings_menu);
-  AddView(_settings_menu, this);
+  _gear.setNew(new HeaderButton(this, 0));
+  _gear->setSize(CRect(r.right - 4 - HEAD_GEAR_W, 3, r.right - 4, 19));
+  AddView(_gear, this);
 }
 
 //-------------------------------------------------------------------------------------------------
@@ -1048,7 +1135,7 @@ void HeaderCtrl::step(int dir)
 void HeaderCtrl::valueChanged(CControl* ctrl)
 {
   if (ctrl != _preset_menu)
-    return; // the Settings submenus go to the Gui
+    return;
   int sel = (int)ctrl->getValue();
   if (sel >= 0 && sel < _num_presets && !divider(sel))
     _gui->selectProgram(sel);
@@ -1078,20 +1165,19 @@ void HeaderCtrl::drawRect(CDrawContext* context, const CRect& update_rect_)
   for (int y = 0; y < h; y += 5)
     bg->blend(temp_bm, CRect(0, y, w, std::min(y + 5, h)), CPoint(0, 21), 255, false);
 
-  // previous & next
-  for (int i = 0; i < 2; i++) {
-    HeaderButton* b = i ? _next : _prev;
-    CRect r = i ? g_head_next : g_head_prev;
-    DrawBox(temp_bm, r, pal.box, b->_hover ? pal.hover : pal.box_line);
-    DrawArrow(temp_bm,
-              (float)(r.left + r.right) * 0.5f,
-              (float)(r.top + r.bottom) * 0.5f,
-              7.0f,
-              i ? +1 : -1,
-              b->_hover ? pal.hover : pal.value);
-  }
+  // the preset's number
+  int prog = _gui->blkFx()->getProgram();
+  CharArray<32> num;
+  if (prog >= 0 && prog < _num_presets)
+    num << (prog + 1) << "/" << _num_presets;
+  else
+    num << "-";
+  DrawBox(temp_bm, g_head_num, pal.box, pal.box_line);
+  temp_bm->setFont(kNormalFont, /*sz*/ 11, kNormalFace);
+  temp_bm->setFontColor(pal.label);
+  temp_bm->drawString(num, g_head_num, 0, kCenterText);
 
-  // the preset's name, with a down arrow for its list
+  // its name, with a down arrow for the list
   bool name_hot = _preset_menu->getState() != _preset_menu->INACTIVE;
   CRect r = g_head_name;
   DrawBox(temp_bm, r, pal.box, name_hot ? pal.hover : pal.box_line);
@@ -1103,15 +1189,29 @@ void HeaderCtrl::drawRect(CDrawContext* context, const CRect& update_rect_)
   DrawArrow(temp_bm, (float)r.right - 8.0f, (float)(r.top + r.bottom) * 0.5f, 7.0f, 0,
             name_hot ? pal.hover : pal.label);
 
-  // Settings
-  bool set_hot = _settings_menu->getState() != _settings_menu->INACTIVE;
-  r = CRect(w - 4 - HEAD_SETTINGS_W, 3, w - 4, 19);
-  DrawBox(temp_bm, r, pal.box, set_hot ? pal.hover : pal.box_line);
-  temp_bm->setFont(kNormalFont, /*sz*/ 11, kNormalFace);
-  temp_bm->setFontColor(set_hot ? pal.hover : pal.value);
-  temp_bm->drawString("Settings", CRect(r.left + 8, r.top, r.right - 14, r.bottom), 0, kLeftText);
-  DrawArrow(temp_bm, (float)r.right - 8.0f, (float)(r.top + r.bottom) * 0.5f, 7.0f, 0,
-            set_hot ? pal.hover : pal.label);
+  // previous & next
+  for (int i = 0; i < 2; i++) {
+    HeaderButton* b = i ? _next : _prev;
+    CRect br = i ? g_head_next : g_head_prev;
+    DrawBox(temp_bm, br, pal.box, b->_hover ? pal.hover : pal.box_line);
+    DrawArrow(temp_bm,
+              (float)(br.left + br.right) * 0.5f,
+              (float)(br.top + br.bottom) * 0.5f,
+              7.0f,
+              i ? +1 : -1,
+              b->_hover ? pal.hover : pal.value);
+  }
+
+  // the gear (lit while the settings page is open)
+  CRect gr = CRect(w - 4 - HEAD_GEAR_W, 3, w - 4, 19);
+  bool gear_hot = _gear->_hover || _gui->_settings_open;
+  DrawBox(temp_bm, gr, pal.box, gear_hot ? pal.hover : pal.box_line);
+  DrawGear(temp_bm,
+           (float)(gr.left + gr.right) * 0.5f,
+           (float)(gr.top + gr.bottom) * 0.5f,
+           11.0f,
+           gear_hot ? pal.hover : pal.value,
+           pal.box);
 
   temp_bm->blend(context, update_rect, rel_update_rect, 255, false);
 }

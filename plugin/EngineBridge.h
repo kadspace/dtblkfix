@@ -85,9 +85,9 @@ public:
   void closeEditor();
   void idleEditor();
 
-  // leave out a square at the bottom right of the editor window (width x height pixels), where the
-  // wrapper's resize grip goes; 0 for none
-  static void setEditorWindowCorner(void* window, int width, int height, int corner);
+  // leave out a corner_w x corner_h rectangle at the bottom right of the editor window (width x
+  // height pixels), where the wrapper's resize grip goes; 0 for none
+  static void setEditorWindowCorner(void* window, int width, int height, int corner_w, int corner_h);
 
   // the open editor's background & label colours (0xrrggbb), for the resize grip
   bool editorColours(uint32_t& background, uint32_t& label) const;

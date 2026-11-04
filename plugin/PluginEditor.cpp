@@ -2,6 +2,7 @@
 
 #include "PluginEditor.h"
 
+#include <cmath>
 #include <cstdlib>
 
 DtBlkFixEditor::DtBlkFixEditor(DtBlkFixProcessor& p)
@@ -11,8 +12,8 @@ DtBlkFixEditor::DtBlkFixEditor(DtBlkFixProcessor& p)
   setOpaque(true);
   addAndMakeVisible(_host);
 
-  // drag the corner (or the host's window edge) to resize, keeping the editor's shape; the size
-  // limits & shape are set in updateSize()
+  // drag the corner (or the host's window edge) to any size: the editor is fitted into it (the
+  // largest size that fits, centred); the size limits are set in updateSize()
   setResizable(true, false);
   _grip = std::make_unique<Grip>(this, getConstrainer());
   _grip->setAlwaysOnTop(true);
@@ -24,8 +25,12 @@ DtBlkFixEditor::DtBlkFixEditor(DtBlkFixProcessor& p)
   setSize(_pix_width, _pix_height);
   openEditor();
 
-  // Size, Skin or Style picked in the editor, its rows changed, or a new state loaded: reopen
+  // Size, Skin or Style picked in the editor, its rows changed, or a new state loaded: reopen.
+  // A new size (picked, or loaded) sets the window's size again; otherwise a window the user
+  // sized keeps its size and the editor is fitted into it.
   _processor.onViewChange = [this] {
+    if (_processor.view.scale_pct != _opened_pct)
+      _fit = false;
     closeEditor();
     openEditor();
   };
@@ -55,9 +60,12 @@ void DtBlkFixEditor::openEditor()
     if (skins[i] == _processor.view.skin)
       skin_idx = i;
 
+  if (_fit)
+    _processor.view.scale_pct = fitScale();
   _processor.view.scale_pct = juce::jlimit(
       dtblkfix::Engine::minScale(), dtblkfix::Engine::maxScale(), _processor.view.scale_pct);
   int scale_pct = _processor.view.scale_pct;
+  _opened_pct = scale_pct;
 
   engine.editorSize(scale_pct, _pix_width, _pix_height);
   {
@@ -75,10 +83,43 @@ void DtBlkFixEditor::openEditor()
     _grip->background = juce::Colour(0xff000000u | background);
     _grip->lines = juce::Colour(0xff000000u | label);
     _grip->repaint();
+    repaint();
   }
 
   _display_scale = 0.0f;
   updateSize();
+}
+
+float DtBlkFixEditor::displayScale()
+{
+  // the original editor is sized in pixels, JUCE sizes in points
+  float scale = (float)juce::Component::getApproximateScaleFactorForComponent(this);
+  return scale > 0.0f ? scale : 1.0f;
+}
+
+int DtBlkFixEditor::fitScale()
+{
+  // the largest size (percent) at which the editor, with its current rows, fits the window
+  int w100 = 0, h100 = 0;
+  _processor.engine().editorSize(100, w100, h100);
+  float s = displayScale();
+  float fx = (float)getWidth() * s * 100.0f / (float)juce::jmax(1, w100);
+  float fy = (float)getHeight() * s * 100.0f / (float)juce::jmax(1, h100);
+  return juce::jlimit(dtblkfix::Engine::minScale(),
+                      dtblkfix::Engine::maxScale(),
+                      (int)std::floor(juce::jmin(fx, fy)));
+}
+
+void DtBlkFixEditor::layoutHost()
+{
+  // the editor's window, centred in ours
+  float s = _display_scale > 0.0f ? _display_scale : displayScale();
+  int w = juce::roundToInt(_pix_width / s), h = juce::roundToInt(_pix_height / s);
+  _host_bounds = juce::Rectangle<int>(juce::jmax(0, (getWidth() - w) / 2),
+                                      juce::jmax(0, (getHeight() - h) / 2),
+                                      w,
+                                      h);
+  _host.setBounds(_host_bounds);
 }
 
 void DtBlkFixEditor::closeEditor()
@@ -93,31 +134,32 @@ void DtBlkFixEditor::closeEditor()
 
 void DtBlkFixEditor::updateSize()
 {
-  // the original editor is sized in pixels, JUCE sizes in points
-  float scale = (float)juce::Component::getApproximateScaleFactorForComponent(this);
-  if (scale <= 0.0f)
-    scale = 1.0f;
+  float scale = displayScale();
   if (scale == _display_scale)
     return;
   _display_scale = scale;
 
-  // it can be dragged between the smallest & largest sizes, keeping its shape (which depends on
-  // the effect rows shown)
+  // free form: any width & height from the smallest editor (with its current rows) to well past
+  // the largest
   dtblkfix::Engine& engine = _processor.engine();
   int min_w = 0, min_h = 0, max_w = 0, max_h = 0;
   engine.editorSize(dtblkfix::Engine::minScale(), min_w, min_h);
   engine.editorSize(dtblkfix::Engine::maxScale(), max_w, max_h);
   if (auto* constrainer = getConstrainer()) {
-    constrainer->setFixedAspectRatio((double)_pix_width / (double)juce::jmax(1, _pix_height));
+    constrainer->setFixedAspectRatio(0.0);
     constrainer->setSizeLimits(juce::roundToInt(min_w / scale),
                                juce::roundToInt(min_h / scale),
-                               juce::roundToInt(max_w / scale),
-                               juce::roundToInt(max_h / scale));
+                               juce::roundToInt(max_w * 2 / scale),
+                               juce::roundToInt(max_h * 2 / scale));
   }
 
-  _own_resize = true;
-  setSize(juce::roundToInt(_pix_width / scale), juce::roundToInt(_pix_height / scale));
-  _own_resize = false;
+  // the window is the editor's size, unless the user sized it
+  if (!_fit) {
+    _own_resize = true;
+    setSize(juce::roundToInt(_pix_width / scale), juce::roundToInt(_pix_height / scale));
+    _own_resize = false;
+  }
+  layoutHost();
   updateGrip();
 }
 
@@ -129,56 +171,50 @@ void DtBlkFixEditor::updateGrip()
     _grip->setBounds(getWidth() - gripSize, getHeight() - gripSize, gripSize, gripSize);
   if (!_open || _display_scale <= 0.0f)
     return;
+  // the grip's part of the editor's window, from that window's bottom right corner (the editor is
+  // centred, so it's there or nowhere)
   float s = _display_scale;
+  auto overlap = _host_bounds.getIntersection(
+      juce::Rectangle<int>(getWidth() - gripSize, getHeight() - gripSize, gripSize, gripSize));
   dtblkfix::Engine::setEditorWindowCorner(_host.getHWND(),
-                                          juce::roundToInt(getWidth() * s),
-                                          juce::roundToInt(getHeight() * s),
-                                          juce::roundToInt(gripSize * s));
+                                          _pix_width,
+                                          _pix_height,
+                                          juce::roundToInt(overlap.getWidth() * s),
+                                          juce::roundToInt(overlap.getHeight() * s));
 }
 
 void DtBlkFixEditor::applyDraggedSize()
 {
+  // reopen at the size that fits, drawn sharp at that size, and saved with the state
   _dragged_ticks = 0;
-  int pct = _dragged_pct;
-  _dragged_pct = 0;
-  if (pct != 0 && pct != _processor.view.scale_pct) {
-    // reopen at the new size, drawn sharp at that size, and saved with the state
-    _processor.view.scale_pct = pct;
+  if (_fit && fitScale() != _opened_pct) {
     closeEditor();
     openEditor();
-  }
-  else {
-    // back to the exact size of the editor
-    _display_scale = 0.0f;
-    updateSize();
   }
 }
 
 void DtBlkFixEditor::paint(juce::Graphics& g)
 {
-  g.fillAll(juce::Colours::black);
+  // around the editor when the window isn't its shape: the skin's background
+  g.fillAll(_grip ? _grip->background : juce::Colours::black);
 }
 
 void DtBlkFixEditor::resized()
 {
-  _host.setBounds(getLocalBounds());
-
+  layoutHost();
   updateGrip();
-  if (!_open || _display_scale <= 0.0f)
+  if (_own_resize || !_open || _display_scale <= 0.0f)
     return;
-  float s = _display_scale;
 
-  // dragged (the grip or the host's window edge): the size it's at, in percent of the original
-  // (a host rounding our own size by a pixel isn't a drag)
-  if (_own_resize || std::abs(getWidth() - juce::roundToInt(_pix_width / s)) <= 2)
+  // sized by the user (the grip or the host's window edge); a host rounding our own size by a
+  // pixel isn't that
+  float s = _display_scale;
+  if (!_fit && std::abs(getWidth() - juce::roundToInt(_pix_width / s)) <= 2 &&
+      std::abs(getHeight() - juce::roundToInt(_pix_height / s)) <= 2)
     return;
-  int w100 = 0, h100 = 0;
-  _processor.engine().editorSize(100, w100, h100);
-  int pct = juce::jlimit(dtblkfix::Engine::minScale(),
-                         dtblkfix::Engine::maxScale(),
-                         juce::roundToInt(getWidth() * s * 100.0f / (float)juce::jmax(1, w100)));
-  _dragged_pct = pct;
-  _dragged_ticks = 6; // apply when it's been still for 0.2 s
+  _fit = true;
+  if (fitScale() != _opened_pct)
+    _dragged_ticks = 6; // refit when it's been still for 0.2 s (or the grip is let go)
 }
 
 void DtBlkFixEditor::parentHierarchyChanged()

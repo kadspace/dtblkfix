@@ -1,7 +1,7 @@
 // DtBlkFix tests: open the editor in a window, play audio through it and save a screenshot.
 //
 // dtblkfix_gui_snapshot <folder holding dtblkfx\> <out.png> [--scale s] [--skin folder]
-//                       [--preset n] [--style 0 (original) | 1 (boxes)]
+//                       [--preset n] [--style 0 (original) | 1 (boxes)] [--settings 1]
 //
 // For looking at UI scaling and skins (CI uploads the screenshots).
 
@@ -21,7 +21,11 @@ bool DtBlkFixLoadImages(const char* skin_dir, float scale, GuiImages* dst, ostre
 struct NoViewChange : public GuiViewListener {
   DtBlkFx* fx;
   NoViewChange() : fx(NULL) {}
-  virtual void guiViewChange(int, int, int) {}
+  virtual void guiViewChange(int scale_pct, int skin_idx, int style)
+  {
+    // what the wrapper would apply (printed, to check the settings page)
+    fprintf(stderr, "view change: %d%% skin %d style %d\n", scale_pct, skin_idx, style);
+  }
   virtual void guiProgramChange(int program)
   {
     if (fx)
@@ -82,6 +86,7 @@ int main(int argc, char** argv)
   int preset = 33;
   int hold_ms = 0; // keep the editor live this long before the screenshot
   int style = 0;
+  bool settings = false; // with the settings page open
   for (int i = 3; i + 1 < argc; i += 2) {
     if (!strcmp(argv[i], "--scale"))
       scale = (float)atof(argv[i + 1]);
@@ -93,6 +98,8 @@ int main(int argc, char** argv)
       hold_ms = atoi(argv[i + 1]) * 1000;
     else if (!strcmp(argv[i], "--style"))
       style = atoi(argv[i + 1]);
+    else if (!strcmp(argv[i], "--settings"))
+      settings = atoi(argv[i + 1]) != 0;
   }
 
   // pixels are pixels (StdAfx.h targets Windows 2000, so look this up)
@@ -127,6 +134,7 @@ int main(int argc, char** argv)
   std::vector<std::string> skins(1, "Original");
   int scales[] = {75, 100, 125, 150, 200};
   gui->setView(scale, images, skins, 0, style, std::vector<int>(scales, scales + 5), &listener);
+  gui->_settings_open = settings;
   gui->layoutRows(); // the effect rows in use decide the height
 
   // a window to hold the editor

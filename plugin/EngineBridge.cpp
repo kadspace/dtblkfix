@@ -334,13 +334,13 @@ bool Engine::openEditor(void* window, int scale_pct, int skin_idx, int style)
   return gui->open(window);
 }
 
-void Engine::setEditorWindowCorner(void* window, int width, int height, int corner)
+void Engine::setEditorWindowCorner(void* window, int width, int height, int corner_w, int corner_h)
 {
   if (!window)
     return;
   HRGN rgn = CreateRectRgn(0, 0, width, height);
-  if (corner > 0) {
-    HRGN c = CreateRectRgn(width - corner, height - corner, width, height);
+  if (corner_w > 0 && corner_h > 0) {
+    HRGN c = CreateRectRgn(width - corner_w, height - corner_h, width, height);
     CombineRgn(rgn, rgn, c, RGN_DIFF);
     DeleteObject(c);
   }

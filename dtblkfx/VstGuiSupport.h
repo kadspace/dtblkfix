@@ -527,6 +527,10 @@ void DrawBox(CDrawContext* context, CRect r, const CColor& fill, const CColor& l
 // DtBlkFix: a filled triangle pointing left (dir -1), right (+1) or down (0), centred on (x, y)
 void DrawArrow(CDrawContext* context, float x, float y, float size, int dir, const CColor& col);
 
+// DtBlkFix: a gear (8 teeth) of the given diameter centred on (x, y), with a hole in hole_col
+void DrawGear(CDrawContext* context, float x, float y, float size, const CColor& col,
+              const CColor& hole_col);
+
 //-------------------------------------------------------------------------------------------------
 // set the drawing context offset to match the given view
 void OffsetDrawContext(CDrawContext* dc, CView* view);

@@ -96,12 +96,13 @@ public:
 };
 
 //-----------------------------------------------------------------------------
-// DtBlkFix: the header above the global controls: the preset (previous, pick from a list, next)
-// and a Settings menu (Size, Skin, Style). Its controls are owner-drawn; the header draws them.
+// DtBlkFix: the header above the global controls: the preset (number, name to pick from a list,
+// previous & next) and a gear for the settings page. Its controls are owner-drawn; the header
+// draws them.
 class HeaderCtrl;
 class HeaderButton : public CView {
 public:
-  HeaderButton(HeaderCtrl* header, int step);
+  HeaderButton(HeaderCtrl* header, int step); // step -1 previous, +1 next, 0 the gear
   void setSize(CastCRect r);
   virtual void draw(CDrawContext* /*context*/) {}
   virtual CMouseEventResult onMouseDown(CPoint& mouse, const long& buttons);
@@ -109,7 +110,7 @@ public:
   virtual CMouseEventResult onMouseExited(CPoint& mouse, const long& buttons);
 
   _Ptr<HeaderCtrl> _header;
-  int _step; // -1 previous, +1 next
+  int _step;
   bool _hover;
 };
 
@@ -129,10 +130,24 @@ public:
   bool divider(int program);
 
   _Ptr<Gui> _gui;
-  VstGuiRef<HeaderButton> _prev, _next;
-  VstGuiRef<COptionMenuOwnerDraw> _preset_menu, _settings_menu;
+  VstGuiRef<HeaderButton> _prev, _next, _gear;
+  VstGuiRef<COptionMenuOwnerDraw> _preset_menu;
   int _num_presets; // programs that are presets (the last program resets the current one)
   int _reset_entry;  // the menu entry for that last program
+};
+
+//-----------------------------------------------------------------------------
+// DtBlkFix: the settings page, in place of the spectrograms while the gear is on: Size, Skin and
+// Style, each a list that applies when picked (the menus go to the Gui, the page draws them)
+class SettingsPage : public CViewContainer {
+public:
+  SettingsPage();
+  void init(Gui* gui, CastCRect rect);
+  virtual void draw(CDrawContext* context);
+  virtual void drawRect(CDrawContext* context, const CRect& update_rect);
+
+  _Ptr<Gui> _gui;
+  VstGuiRef<COptionMenuOwnerDraw> _menu[3]; // size, skin, style
 };
 
 //-----------------------------------------------------------------------------
@@ -226,9 +241,11 @@ public: // DtBlkFix: UI scale and skin
   // pick the palette for the skin (from its background)
   void makePalette();
 
-  // Size, Skin & Style submenus of the header's Settings menu
-  VstGuiRef<COptionMenu> _size_menu, _skin_menu, _style_menu;
-  void addViewMenus(COptionMenu* menu);
+  // the settings page (in place of the spectrograms), opened & closed by the header's gear; it
+  // stays open while the editor is reopened (a setting picked there reopens it)
+  bool _settings_open;
+  VstGuiRef<SettingsPage> _settings_page;
+  void toggleSettings();
 
   // the header (preset & settings), above the global controls
   VstGuiRef<HeaderCtrl> _header;

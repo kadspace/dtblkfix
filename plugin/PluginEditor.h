@@ -41,7 +41,10 @@ private:
   void closeEditor();
   void updateSize();
   void updateGrip();
+  void layoutHost();
   void applyDraggedSize();
+  float displayScale();
+  int fitScale();
 
   static constexpr int gripSize = 14; // points
 
@@ -56,8 +59,14 @@ private:
   float _display_scale = 0.0f;
   bool _open = false;
 
-  // a size dragged to (percent), applied once the dragging stops for a moment
-  int _dragged_pct = 0, _dragged_ticks = 0;
+  // where the editor's window is in ours, and the size it was opened at (percent)
+  juce::Rectangle<int> _host_bounds;
+  int _opened_pct = 0;
+
+  // true once the user sizes the window: it keeps its size and the editor is fitted into it;
+  // _dragged_ticks counts down to refitting once the sizing stops for a moment
+  bool _fit = false;
+  int _dragged_ticks = 0;
   // true while we set our own size (not a drag)
   bool _own_resize = false;
 
