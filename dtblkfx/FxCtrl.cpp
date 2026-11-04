@@ -80,6 +80,7 @@ bool /*success*/ FxCtrl::init(Gui* gui, CastCRect rect, int fx_set)
 
   //
   _drag_both_state = DRAG_BOTH_INACTIVE;
+  _del_hover = false;
 
   // amp menu has not been built
   _amp_menu_mixmode = AMP_MENU_EMPTY;
@@ -232,7 +233,8 @@ void FxCtrl::drawRect(CDrawContext* context, const CRect& update_rect)
 
   // background image is made from 5 horizontal tiles
   // 0=inactive bg, 1=row selected bg, 2=control selected bg, 3=amp bg, 4=freq bg
-  CRect bg_img_rect = GetTile(Images::g_fx_bg, /*num x*/ 1, /*num y*/ 5, /*idx x*/ 0, /*idx y*/ 0);
+  CRect bg_img_rect =
+      GetTile(_gui->_images.fx_bg, /*num x*/ 1, /*num y*/ 5, /*idx x*/ 0, /*idx y*/ 0);
   CRect bg_inactive_r = TileOffset(bg_img_rect, /*x*/ 0, /*y*/ 0);
   CRect bg_row_focus_r = TileOffset(bg_img_rect, /*x*/ 0, /*y*/ 1);
   CRect bg_ctrl_focus_r = TileOffset(bg_img_rect, /*x*/ 0, /*y*/ 2);
@@ -260,19 +262,19 @@ void FxCtrl::drawRect(CDrawContext* context, const CRect& update_rect)
 
     // blend
     for (i = 0; i < 3; i++)
-      Images::g_fx_bg->blend(/*dest*/ temp_bm,
-                             dst_r[i],
-                             src_p[i] + TopLeft(dst_r[i]),
-                             /*alpha*/ 255,
-                             /*use src alpha*/ false);
+      _gui->_images.fx_bg->blend(/*dest*/ temp_bm,
+                                 dst_r[i],
+                                 src_p[i] + TopLeft(dst_r[i]),
+                                 /*alpha*/ 255,
+                                 /*use src alpha*/ false);
   }
   else {
     // row not selected
-    Images::g_fx_bg->blend(/*dest*/ temp_bm,
-                           /*dest*/ CPoint(0, 0),
-                           /*src rect*/ bg_inactive_r,
-                           /*alpha*/ 255,
-                           /*use src alpha*/ false);
+    _gui->_images.fx_bg->blend(/*dest*/ temp_bm,
+                               /*dest*/ CPoint(0, 0),
+                               /*src rect*/ bg_inactive_r,
+                               /*alpha*/ 255,
+                               /*use src alpha*/ false);
   }
 
   // for mask effects, remove the 1 pixel high separating line at the bottom by copying the second
@@ -284,7 +286,8 @@ void FxCtrl::drawRect(CDrawContext* context, const CRect& update_rect)
     // 1 before bottom line of inactive bg
     CPoint src_p(0, dst_r.top - 1);
     //
-    Images::g_fx_bg->blend(/*dest*/ temp_bm, dst_r, src_p, /*alpha*/ 255, /*use src alpha*/ false);
+    _gui->_images.fx_bg->blend(
+        /*dest*/ temp_bm, dst_r, src_p, /*alpha*/ 255, /*use src alpha*/ false);
   }
 
   // copy on the amp overlay
@@ -295,7 +298,7 @@ void FxCtrl::drawRect(CDrawContext* context, const CRect& update_rect)
     amp_alpha = 63;
   else if (_amp->getState() == _amp->INACTIVE)
     amp_alpha = 127;
-  Images::g_fx_bg->blend(
+  _gui->_images.fx_bg->blend(
       /*dst contect*/ temp_bm, /*dest*/ CPoint(amp_r.left, 0), /*src*/ amp_r, /*alpha*/ amp_alpha);
 
   //
@@ -325,18 +328,18 @@ void FxCtrl::drawRect(CDrawContext* context, const CRect& update_rect)
     CRect r = freq_scale_r;
     r.left = freq_pos[0];
     r.right = freq_pos[1];
-    Images::g_fx_bg->blend(
+    _gui->_images.fx_bg->blend(
         /*dst*/ temp_bm, /*dst*/ CPoint(r.left, 0), /*src rect*/ r, /*alpha*/ freq_alpha);
   }
   else {
     // draw outside freqs (exclude range)
     CRect r = freq_scale_r;
     r.right = freq_pos[1];
-    Images::g_fx_bg->blend(
+    _gui->_images.fx_bg->blend(
         /*dst*/ temp_bm, /*dst*/ CPoint(r.left, 0), /*src rect*/ r, /*alpha*/ freq_alpha);
     r = freq_scale_r;
     r.left = freq_pos[0];
-    Images::g_fx_bg->blend(
+    _gui->_images.fx_bg->blend(
         /*dst*/ temp_bm, /*dst*/ CPoint(r.left, 0), /*src rect*/ r, /*alpha*/ freq_alpha);
   }
 
@@ -351,21 +354,22 @@ void FxCtrl::drawRect(CDrawContext* context, const CRect& update_rect)
   // freq text
   for (i = 0; i < 2; i++) {
     bool active = _freq[i]->getState() > _freq[i]->INACTIVE || _drag_both_state;
-    temp_bm->setFontColor(active ? focus_txt_col : normal_txt_col);
+    // DtBlkFix: the "x" lies over the first frequency, which isn't what the mouse is on then
+    if (i == 0 && _del_hover && !_drag_both_state)
+      active = false;
 
     if (!fft_fx->paramUsed(BlkFxParam::FX_FREQ_A + i))
-      OutlineDrawString(temp_bm, _freq[i], "-", kCenterText);
+      drawValue(temp_bm, CastCRect(_freq[i]), "-", active);
 
     else {
       float hz = BlkFxParam::getHz(freq_val[i]);
       // HzToNote(str, hz);
       str << sprnum(hz, /*min unit*/ 1.0f) << "Hz";
-      OutlineDrawString(temp_bm, _freq[i], str, kCenterText);
+      drawValue(temp_bm, CastCRect(_freq[i]), str, active);
     }
   }
 
   // amp text
-  temp_bm->setFontColor(_amp->getState() == _amp->INACTIVE ? normal_txt_col : focus_txt_col);
 
   bool mix_mode = fft_fx->ampMixMode();
   float amp_mult = BlkFxParam::getEffectAmpMult(amp_v, mix_mode);
@@ -379,17 +383,34 @@ void FxCtrl::drawRect(CDrawContext* context, const CRect& update_rect)
   else
     str << "-inf dB";
 
-  OutlineDrawString(temp_bm, /*rect*/ _amp, str, kCenterText);
+  drawValue(temp_bm, CastCRect(_amp), str, _amp->getState() != _amp->INACTIVE);
 
   // effect type text
-  temp_bm->setFontColor(_fxtype_ctrl->getState() == _fxtype_ctrl->INACTIVE ? normal_txt_col
-                                                                           : focus_txt_col);
-  OutlineDrawString(temp_bm, /*rect*/ _fxtype_ctrl, fft_fx->name(), kCenterText);
+  drawValue(temp_bm,
+            CastCRect(_fxtype_ctrl),
+            fft_fx->name(),
+            _fxtype_ctrl->getState() != _fxtype_ctrl->INACTIVE);
 
   // effect value text
-  temp_bm->setFontColor(_fxval->getState() != _fxval->INACTIVE ? focus_txt_col : normal_txt_col);
   fft_fx->dispVal(blkFx()->_fx1_0 + _fx_set, str, _fxval->getValue());
-  OutlineDrawString(temp_bm, /*rect*/ _fxval, str, kCenterText);
+  drawValue(temp_bm, CastCRect(_fxval), str, _fxval->getState() != _fxval->INACTIVE);
+
+  // DtBlkFix: "x" at the left end to remove the effect while the row has the mouse
+  if (_gui->editableRows() && (active_ctrl || _drag_both_state || _del_hover)) {
+    if (_gui->boxes()) {
+      const GuiPalette& pal = _gui->_palette;
+      CRect r(3, 9, 17, 22); // in the room boxRect() leaves
+      DrawBox(temp_bm, r, pal.box, _del_hover ? pal.hover : pal.box_line);
+      temp_bm->setFont(kNormalFont, /*sz*/ 13, kBoldFace);
+      temp_bm->setFontColor(_del_hover ? pal.hover : pal.value);
+      temp_bm->drawString("\xd7", r, /*opaque*/ 0, kCenterText);
+    }
+    else {
+      temp_bm->setFont(kNormalFont, /*sz*/ 17, kBoldFace);
+      temp_bm->setFontColor(_del_hover ? focus_txt_col : normal_txt_col);
+      OutlineDrawString(temp_bm, delRect(), "\xd7", kCenterText);
+    }
+  }
 
   // copy into main drawing area
   CViewDrawContext dc(this);
@@ -628,6 +649,14 @@ void FxCtrl::mouseInterceptBefore(Event::Args* args)
     return;
   Event::MouseArgs* mouse = (Event::MouseArgs*)args;
 
+  // DtBlkFix: click on the "x" removes this effect (the gui is then reopened without the row)
+  if (mouse->event_type == Event::kMouseDown && (mouse->buttons & kLButton) &&
+      _gui->editableRows() && delRect().pointInside(mouse->mouse)) {
+    _gui->removeFx(_fx_set);
+    mouse->result = kMouseEventHandled;
+    return;
+  }
+
   // update menus if need be
   if (mouse->event_type == Event::kMouseDown && mouse->buttons & kRButton) {
     if (mouse->src_view == _amp)
@@ -729,6 +758,14 @@ void FxCtrl::mouseInterceptAfter(Event::Args* args)
     setDirty();
   }
 
+  // DtBlkFix: is the mouse over the "x"?
+  bool del_hover = _gui->editableRows() && mouse->event_type != Event::kMouseExited &&
+                   delRect().pointInside(mouse->mouse);
+  if (del_hover != _del_hover) {
+    _del_hover = del_hover;
+    setDirty();
+  }
+
   // clr hilites if mouse exits any child control
   if (mouse->event_type == Event::kMouseExited) {
 
@@ -787,7 +824,7 @@ void FxCtrl::valueChanged(CControl* ctrl)
 
     // assume previous fx gui pane needs to be redrawn (in case 2 mask effects in a row were
     // selected or deselected)
-    if (_fx_set > 0)
+    if (_fx_set > 0 && _gui->_fx_ctrl[_fx_set - 1])
       _gui->_fx_ctrl[_fx_set - 1]->setDirty();
   }
 
@@ -827,4 +864,41 @@ void FxCtrl::setParameter(long index, float v)
       _fxval->setValue(v);
       break;
   }
+}
+
+//-------------------------------------------------------------------------------------------------
+CRect FxCtrl::delRect()
+// DtBlkFix: where the "x" is, in our coordinates (left end of the row)
+{
+  return _gui->boxes() ? CRect(0, 0, 20, getHeight()) : CRect(2, 0, 16, getHeight());
+}
+
+//-------------------------------------------------------------------------------------------------
+CRect FxCtrl::boxRect(CRect r)
+// DtBlkFix: the box for a value in control rectangle r: under the frequency scale, and clear of
+// the "x" at the left end
+{
+  int left = (int)r.left;
+  if (_gui->editableRows() && left < 20)
+    left = 20;
+  return CRect(left + 3, 9, r.right - 3, 22);
+}
+
+//-------------------------------------------------------------------------------------------------
+void FxCtrl::drawValue(CContextRGBA* temp_bm, CRect r, const char* str, bool active)
+{
+  if (_gui->boxes()) {
+    const GuiPalette& pal = _gui->_palette;
+    r = boxRect(r);
+    DrawBox(temp_bm, r, pal.box, active ? pal.hover : pal.box_line);
+    temp_bm->setFont(kNormalFont, /*sz*/ 11, kBoldFace);
+    temp_bm->setFontColor(active ? pal.hover : pal.value);
+    temp_bm->drawString(str, r, /*opaque*/ 0, kCenterText);
+    return;
+  }
+  // as the original: white outline, black inside, the outline pink when active
+  temp_bm->setFont(kNormalFont, /*sz*/ 0, kBoldFace);
+  temp_bm->setFillColor(CColorRGB(0, 0, 0));
+  temp_bm->setFontColor(active ? CColorRGB(0xff, 0x80, 0x80) : CColorRGB(0xff, 0xff, 0xff));
+  OutlineDrawString(temp_bm, r, str, kCenterText);
 }

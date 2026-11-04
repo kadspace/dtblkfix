@@ -5,6 +5,7 @@
 #include <ostream>
 
 // load a PNG file into a CContextRGBA, error & warning messages are written to "err"
-bool /*success*/ ReadPng(CContextRGBA* dst, string file_name, ostream* err_str);
+// DtBlkFix: scaled to "scale" pixels per view unit, see CContextRGBA::create
+bool /*success*/ ReadPng(CContextRGBA* dst, string file_name, ostream* err_str, float scale = 1.0f);
 
 #endif

@@ -123,6 +123,86 @@ struct LoadPresets {
 };
 
 //-------------------------------------------------------------------------------------------------
+bool /*ok*/ DtBlkFixGlobalInit()
+// DtBlkFix: one time init (FFTW, presets & images from g_plugin_path), moved out of VSTPluginMain
+// so that the JUCE wrapper can use it too. Returns false if the effect can't be created.
+{
+  // do one time init stuff here because it's safer than from DllMain (can't load DLLs there)
+  ScopeCriticalSection sml(g_init_protection);
+
+  // don't create anything if loading previously failed
+  if (g_load_state == GLOBAL_LOAD_STATE_INIT_FAIL)
+    return false;
+
+  // otherwise init if we need to
+  if (g_load_state == GLOBAL_LOAD_STATE_NEED_INIT) {
+
+    // assume failure for now
+    g_load_state = GLOBAL_LOAD_STATE_INIT_FAIL;
+
+    ostringstream err_str;
+
+// try to load FFTW dll (can't work without it)
+#ifdef _WIN32
+    vector<string> paths;
+    paths.push_back(g_plugin_path.toString() + BLKFX_DIR);
+    paths.push_back(g_plugin_path);
+    if (!LoadFFTWfDll(paths, &err_str)) {
+      MessageBox(NULL, err_str.str().c_str(), "DtBlkFx, DLL error", MB_OK);
+      return false;
+    }
+#endif
+
+    CreateFFTWfPlans();
+
+    //
+    g_load_state = GLOBAL_LOAD_STATE_MISSING_FILES;
+
+    // now try to load images
+    bool image_error = false;
+    for (int i = 0; i < NUM_ELEMENTS(g_load_images); i++) {
+      if (!ReadPng(g_load_images[i].dst->New(),
+                   g_plugin_path.toString() + g_load_images[i].file_name,
+                   &err_str))
+        image_error = true;
+    }
+
+    // load presets from the text file
+    if (!LoadPresets(&err_str))
+      image_error = true;
+
+    // check for error
+    if (image_error)
+      MessageBox(NULL, err_str.str().c_str(), "DtBlkFx image loading error", MB_OK);
+    else
+      g_load_state = GLOBAL_LOAD_STATE_INIT_OK;
+  }
+  return true;
+}
+
+//-------------------------------------------------------------------------------------------------
+bool /*ok*/ DtBlkFixLoadImages(const char* skin_dir, float scale, GuiImages* dst, ostream* err)
+// DtBlkFix: load the images of a skin (a folder holding the stereo_*.png files) for a UI scale
+{
+  VstGuiRef<CContextRGBA>* slot[NUM_ELEMENTS(g_load_images)] = {&dst->slider_bg[0],
+                                                                &dst->slider_bg[1],
+                                                                &dst->slider_knob[0],
+                                                                &dst->slider_knob[1],
+                                                                &dst->splash_bg,
+                                                                &dst->glob_bg,
+                                                                &dst->fx_bg};
+  bool ok = true;
+  for (int i = 0; i < NUM_ELEMENTS(g_load_images); i++) {
+    // file name without the "dtblkfx\" folder
+    string file = string(skin_dir) + "\\" + (g_load_images[i].file_name + strlen(BLKFX_DIR));
+    if (!ReadPng(slot[i]->New(), file, err, scale))
+      ok = false;
+  }
+  return ok;
+}
+
+#ifndef DTBLKFIX_NO_VST2_MAIN
+//-------------------------------------------------------------------------------------------------
 VST_EXPORT AEffect* VSTPluginMain(audioMasterCallback audioMaster)
 {
   LOGG("", "VSTPluginMain" << VAR((void*)audioMaster));
@@ -132,56 +212,9 @@ VST_EXPORT AEffect* VSTPluginMain(audioMasterCallback audioMaster)
     return 0; // old version
 
   try {
-    // do one time init stuff here because it's safer than from DllMain (can't load DLLs there)
-    ScopeCriticalSection sml(g_init_protection);
-
-    // don't create anything if loading previously failed
-    if (g_load_state == GLOBAL_LOAD_STATE_INIT_FAIL)
+    if (!DtBlkFixGlobalInit())
       return NULL;
 
-    // otherwise init if we need to
-    if (g_load_state == GLOBAL_LOAD_STATE_NEED_INIT) {
-
-      // assume failure for now
-      g_load_state = GLOBAL_LOAD_STATE_INIT_FAIL;
-
-      ostringstream err_str;
-
-// try to load FFTW dll (can't work without it)
-#ifdef _WIN32
-      vector<string> paths;
-      paths.push_back(g_plugin_path.toString() + BLKFX_DIR);
-      paths.push_back(g_plugin_path);
-      if (!LoadFFTWfDll(paths, &err_str)) {
-        MessageBox(NULL, err_str.str().c_str(), "DtBlkFx, DLL error", MB_OK);
-        return NULL;
-      }
-#endif
-
-      CreateFFTWfPlans();
-
-      //
-      g_load_state = GLOBAL_LOAD_STATE_MISSING_FILES;
-
-      // now try to load images
-      bool image_error = false;
-      for (int i = 0; i < NUM_ELEMENTS(g_load_images); i++) {
-        if (!ReadPng(g_load_images[i].dst->New(),
-                     g_plugin_path.toString() + g_load_images[i].file_name,
-                     &err_str))
-          image_error = true;
-      }
-
-      // load presets from the text file
-      if (!LoadPresets(&err_str))
-        image_error = true;
-
-      // check for error
-      if (image_error)
-        MessageBox(NULL, err_str.str().c_str(), "DtBlkFx image loading error", MB_OK);
-      else
-        g_load_state = GLOBAL_LOAD_STATE_INIT_OK;
-    }
     // Create the AudioEffect
     AEffect* t = (new DtBlkFx(audioMaster))->getAeffect();
 
@@ -236,3 +269,5 @@ VST_EXPORT AEffect* main_macho(audioMasterCallback audioMaster)
   return VSTPluginMain(audioMaster);
 }
 #endif
+
+#endif // DTBLKFIX_NO_VST2_MAIN

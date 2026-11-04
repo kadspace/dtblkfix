@@ -1,0 +1,182 @@
+name: build
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+  workflow_dispatch:
+  workflow_call:
+
+permissions:
+  contents: read
+
+env:
+  JUCE_TAG: "8.0.15"
+  FFTW_URL: "https://fftw.org/pub/fftw/fftw-3.3.5-dll64.zip"
+  FFTW_SHA256: "cfd88dc0e8d7001115ea79e069a2c695d52c8947f5b4f3b7ac54a192756f439f"
+  # the original engine that renders are compared against (DtBlkFx with the latency fix)
+  REFERENCE_COMMIT: "ab3dba73c7a7a424b8e6309a2c0a76a696504a62"
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Version
+        shell: bash
+        run: |
+          version=$(sed -n 's/^project(DtBlkFix VERSION \([0-9.]*\).*/\1/p' CMakeLists.txt)
+          echo "VERSION=$version" >> "$GITHUB_ENV"
+          echo "DtBlkFix $version"
+
+      - name: FFTW (official Windows DLLs, checksum checked)
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force build\fftw | Out-Null
+          Invoke-WebRequest -Uri $env:FFTW_URL -OutFile build\fftw.zip
+          $hash = (Get-FileHash build\fftw.zip -Algorithm SHA256).Hash.ToLower()
+          if ($hash -ne $env:FFTW_SHA256) { throw "FFTW zip checksum mismatch: $hash" }
+          Expand-Archive build\fftw.zip -DestinationPath build\fftw -Force
+          Get-FileHash build\fftw\libfftw3f-3.dll -Algorithm SHA256
+
+      - name: Original engine for the comparison tests
+        shell: bash
+        run: |
+          mkdir -p build/reference
+          git archive "$REFERENCE_COMMIT" dtblkfx vstgui fftw libpng zlib projects | tar -x -C build/reference
+
+      - name: JUCE
+        shell: bash
+        run: git clone --depth 1 --branch "$JUCE_TAG" https://github.com/juce-framework/JUCE.git build/JUCE
+
+      - name: Configure
+        shell: pwsh
+        run: >
+          cmake -S . -B build/cmake -A x64
+          "-DDTBLKFIX_JUCE_DIR=$PWD/build/JUCE"
+          "-DDTBLKFIX_REFERENCE_DIR=$PWD/build/reference"
+          "-DDTBLKFIX_FFTW_DIR=$PWD/build/fftw"
+
+      - name: Build
+        run: cmake --build build/cmake --config Release --parallel
+
+      - name: Test
+        run: ctest --test-dir build/cmake -C Release --output-on-failure -j 2
+
+      - name: Test results
+        if: always()
+        shell: bash
+        run: |
+          for f in build/cmake/Testing/Temporary/LastTest*.log; do
+            [ -f "$f" ] && grep -E "^(ok  |FAIL|[ 0-9]+ .*(identical|DIFFERS|differs)|[0-9]+ presets:|all passed|FAILED)" "$f" || true
+          done
+
+      - name: Package
+        shell: pwsh
+        run: >
+          ./packaging/package.ps1 -Build build/cmake -Juce build/JUCE -Out build/package
+          -Version $env:VERSION
+
+      - name: Drag the corner to resize (standalone app)
+        continue-on-error: true
+        shell: pwsh
+        run: |
+          Add-Type -AssemblyName System.Drawing
+          Add-Type @"
+          using System;
+          using System.Runtime.InteropServices;
+          public static class W {
+            [DllImport("user32.dll")] public static extern bool SetProcessDPIAware();
+            [DllImport("user32.dll")] public static extern bool GetClientRect(IntPtr h, out RECT r);
+            [DllImport("user32.dll")] public static extern bool GetWindowRect(IntPtr h, out RECT r);
+            [DllImport("user32.dll")] public static extern bool ClientToScreen(IntPtr h, ref POINT p);
+            [DllImport("user32.dll")] public static extern bool SetCursorPos(int x, int y);
+            [DllImport("user32.dll")] public static extern void mouse_event(uint f, uint dx, uint dy, uint d, IntPtr e);
+            [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr h);
+            public struct RECT { public int L, T, R, B; }
+            public struct POINT { public int X, Y; }
+          }
+          "@
+          [W]::SetProcessDPIAware() | Out-Null
+          New-Item -ItemType Directory -Force build\screenshots | Out-Null
+          function Shot($h, $name) {
+            $r = New-Object W+RECT
+            [W]::GetWindowRect($h, [ref]$r) | Out-Null
+            $bmp = New-Object System.Drawing.Bitmap ($r.R - $r.L), ($r.B - $r.T)
+            $g = [System.Drawing.Graphics]::FromImage($bmp)
+            $g.CopyFromScreen($r.L, $r.T, 0, 0, $bmp.Size)
+            $bmp.Save("$PWD\build\screenshots\$name.png")
+            $g.Dispose(); $bmp.Dispose()
+          }
+          function Client($h) {
+            $r = New-Object W+RECT
+            [W]::GetClientRect($h, [ref]$r) | Out-Null
+            return $r
+          }
+          $exe = "build\cmake\plugin\DtBlkFix_artefacts\Release\Standalone\DtBlkFix.exe"
+          $p = Start-Process $exe -PassThru
+          Start-Sleep -Seconds 8
+          $p.Refresh()
+          $h = $p.MainWindowHandle
+          if ($h -eq [IntPtr]::Zero) { throw "no window" }
+          [W]::SetForegroundWindow($h) | Out-Null
+          Start-Sleep -Milliseconds 500
+          $before = Client $h
+          Shot $h "drag-before"
+          # the bottom right corner of the window's client area, where the grip is
+          $pt = New-Object W+POINT
+          $pt.X = $before.R - 5; $pt.Y = $before.B - 5
+          [W]::ClientToScreen($h, [ref]$pt) | Out-Null
+          [W]::SetCursorPos($pt.X, $pt.Y) | Out-Null
+          Start-Sleep -Milliseconds 300
+          [W]::mouse_event(2, 0, 0, 0, [IntPtr]::Zero)  # left button down
+          for ($i = 1; $i -le 20; $i++) {
+            [W]::SetCursorPos($pt.X + 8 * $i, $pt.Y + 6 * $i) | Out-Null
+            Start-Sleep -Milliseconds 40
+          }
+          [W]::mouse_event(4, 0, 0, 0, [IntPtr]::Zero)  # left button up
+          Start-Sleep -Seconds 2
+          $after = Client $h
+          Shot $h "drag-after"
+          $p.CloseMainWindow() | Out-Null
+          Start-Sleep -Seconds 2
+          if (-not $p.HasExited) { $p.Kill() }
+          "client area before: $($before.R) x $($before.B), after the drag: $($after.R) x $($after.B)"
+          if ($after.R -le $before.R) { throw "the window didn't get bigger" }
+
+      - name: Screenshots of the editor
+        continue-on-error: true
+        shell: pwsh
+        run: |
+          $exe = "build\cmake\tests\Release\dtblkfix_gui_snapshot.exe"
+          New-Item -ItemType Directory -Force build\screenshots | Out-Null
+          $dir = "build\cmake\plugin\DtBlkFix_artefacts\Release\Standalone"
+          Copy-Item $exe $dir
+          foreach ($style in "0", "1") {
+            $style_name = if ($style -eq "1") { "boxes" } else { "original" }
+            foreach ($scale in "0.75", "1", "1.25", "1.5", "2") {
+              foreach ($skin in "", "Dark", "Warm") {
+                $name = if ($skin) { $skin } else { "Original" }
+                $png = "$PWD\build\screenshots\dtblkfix-$style_name-$name-$scale.png"
+                $a = @("$PWD\$dir", $png, "--scale", $scale, "--style", $style)
+                if ($skin) { $a += @("--skin", "$PWD\$dir\dtblkfx\skins\$skin") }
+                & "$dir\dtblkfix_gui_snapshot.exe" @a
+              }
+            }
+          }
+
+      # the bundle itself (the download unzips to DtBlkFix.vst3, ready to copy)
+      - uses: actions/upload-artifact@v4
+        with:
+          name: DtBlkFix-${{ env.VERSION }}-vst3
+          path: build/package/vst3
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: screenshots
+          path: build/screenshots
+          if-no-files-found: ignore

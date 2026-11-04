@@ -114,6 +114,14 @@ public: // internal stuff
   // map menu index to effect index
   std::vector<float /*0..1*/> _map_menu_to_param;
   std::vector<int /*effect idx*/> _map_effect_to_menu;
+
+  // DtBlkFix: the "x" at the left end of the row that removes the effect (shown on hover)
+  CRect delRect();
+  bool _del_hover;
+
+  // DtBlkFix: draw a value in a control's rectangle: outlined text, or in a box (Gui::boxes())
+  void drawValue(CContextRGBA* temp_bm, CRect r, const char* str, bool active);
+  CRect boxRect(CRect r);
 };
 
 #endif
