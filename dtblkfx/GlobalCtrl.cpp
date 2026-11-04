@@ -79,7 +79,10 @@ static const int GLOB_LBL_Y0 = 1, GLOB_LBL_Y1 = 22, GLOB_LBL_BASE = 15;
 static const int GLOB_LBL_PAD = 4;    // glow around the glyphs
 static const int GLOB_LBL_GAP = 6;    // between label and value
 static const int GLOB_VAL_FONT = 11;  // value font size: its capitals are as tall as the labels'
-static const float GLOB_BASELINE = 15.0f; // baseline of the values in the strip
+static const float GLOB_BASELINE = 15.0f; // baseline of the labels in the strip
+// the values sit this much lower: their bold capitals are taller than the labels', which are mostly
+// lower case, so on one baseline the values look high
+static const int GLOB_VAL_DY = 2;
 
 //-------------------------------------------------------------------------------------------------
 bool /*success*/ GlobalCtrl::init(Gui* gui, CastCRect rect)
@@ -269,7 +272,7 @@ void GlobalCtrl::drawRect(CDrawContext* context, const CRect& update_rect_)
   for (int y = 0; y < bg_h; y += 5)
     bg->blend(temp_bm, CRect(0, y, bg_w, std::min(y + 5, bg_h)), CPoint(0, 21), 255, false);
 
-  // labels, on the values' baseline
+  // labels (the values are GLOB_VAL_DY lower)
   float k = GLOB_LABEL_SCALE, top = GLOB_BASELINE - (GLOB_LBL_BASE - GLOB_LBL_Y0) * k;
   for (int i = 0; i < 4; i++) {
     CRect src(std::max(g_glob_lbl[i].x0 - GLOB_LBL_PAD, 0),
@@ -300,7 +303,10 @@ void GlobalCtrl::drawRect(CDrawContext* context, const CRect& update_rect_)
     CColor txt_col = focus[i] ? focus_txt_col : normal_txt_col, black = CColorRGB(0, 0, 0);
     temp_bm->setFontColor(dark_bg ? black : txt_col);  // outline
     temp_bm->setFillColor(dark_bg ? txt_col : black);  // inside
-    OutlineDrawString(temp_bm, CRect(_val_x[i], 0, _val_x[i] + _val_w[i] + 10, bg_h), val[i], kLeftText);
+    OutlineDrawString(temp_bm,
+                      CRect(_val_x[i], GLOB_VAL_DY, _val_x[i] + _val_w[i] + 10, bg_h + GLOB_VAL_DY),
+                      val[i],
+                      kLeftText);
   }
 
   // blend region to update onto the screen
