@@ -26,6 +26,7 @@ struct NoViewChange : public GuiViewListener {
     // what the wrapper would apply (printed, to check the settings page)
     fprintf(stderr, "view change: %d%% skin %d style %d\n", scale_pct, skin_idx, style);
   }
+  virtual void guiPresetLoaded() {}
   virtual void guiProgramChange(int program)
   {
     if (fx)

@@ -130,6 +130,7 @@ struct Engine::Impl
     fx->setProgram(program);
     listener->programChangedByEditor();
   }
+  virtual void guiPresetLoaded() { listener->programChangedByEditor(); }
 };
 
 Engine::Engine(EngineListener* listener)

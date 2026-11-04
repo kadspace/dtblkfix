@@ -74,6 +74,9 @@ public:
   virtual void guiViewChange(int scale_pct, int skin_idx, int style) = 0;
   // DtBlkFix: a program (preset) was picked in the editor's header; load it and tell the host
   virtual void guiProgramChange(int program) = 0;
+  // DtBlkFix: a user preset was loaded into the current program, or the current program saved as
+  // one (its name changed): tell the host, and reopen the editor
+  virtual void guiPresetLoaded() = 0;
 };
 
 class Gui;
@@ -102,7 +105,7 @@ public:
 class HeaderCtrl;
 class HeaderButton : public CView {
 public:
-  HeaderButton(HeaderCtrl* header, int step); // step -1 previous, +1 next, 0 the gear
+  HeaderButton(HeaderCtrl* header, int step); // step -1 previous, +1 next, 0 the gear, 2 save
   void setSize(CastCRect r);
   virtual void draw(CDrawContext* /*context*/) {}
   virtual CMouseEventResult onMouseDown(CPoint& mouse, const long& buttons);
@@ -125,15 +128,20 @@ public:
   virtual void drawRect(CDrawContext* context, const CRect& update_rect);
   virtual void valueChanged(CControl* ctrl);
 
-  // the previous or next preset (skipping the "--------" dividers between groups of presets)
+  // the previous or next preset: the factory presets (skipping the "--------" dividers between
+  // groups of them), then the user presets
   void step(int dir);
   bool divider(int program);
+  std::vector<int> bank(); // in order: a program, or -(user preset + 1)
+  int bankPos();           // where the current preset is in bank(), or -1
 
   _Ptr<Gui> _gui;
-  VstGuiRef<HeaderButton> _prev, _next, _gear;
+  VstGuiRef<HeaderButton> _prev, _next, _gear, _save;
   VstGuiRef<COptionMenuOwnerDraw> _preset_menu;
   int _num_presets; // programs that are presets (the last program resets the current one)
-  int _reset_entry;  // the menu entry for that last program
+  // what each entry of the preset list does: a program, -(user preset + 2), RESET_ENTRY, or -1
+  std::vector<int> _entry;
+  enum { RESET_ENTRY = -1000000 };
 };
 
 //-----------------------------------------------------------------------------
@@ -253,6 +261,25 @@ public: // DtBlkFix: UI scale and skin
 
   // load a program picked in the header (the host is told)
   void selectProgram(int program);
+
+  // user presets: a text file each, "<name>:<param> <param> ..." as the factory presets, in
+  // Documents\DtBlkFix\Presets (or $DTBLKFIX_PRESET_DIR)
+  struct UserPreset {
+    std::string name, file;
+  };
+  std::vector<UserPreset> _user_presets; // sorted by name, read when the editor opens
+  int _user_preset;                      // the one last loaded or saved, or -1
+  static std::string userPresetDir(bool create);
+  void readUserPresets();
+  bool loadUserPreset(int k);
+  bool saveUserPreset(const char* name);
+
+  // typing a name to save the current program as: an edit box over the preset's name (Enter
+  // saves, Escape or clicking elsewhere cancels; acted on in idle())
+  void startNameEdit();
+  void endNameEdit();
+  void* _name_edit; // HWND
+  int _name_edit_result; // 0 typing, 1 save, 2 cancel
 
 public: // DtBlkFix: only the effects in use get a row, with "+" to add one and "x" to remove one
   // (only with a view listener; otherwise all 8 rows, as in the original)

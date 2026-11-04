@@ -33,6 +33,10 @@ General Public License for more details.
 #include <stdlib.h>
 #include <valarray>
 
+#include <algorithm>
+#include <shlobj.h>
+#include <string>
+
 #include "BlkFxParam.h"
 #include "DTBlkFx.hpp"
 
@@ -143,6 +147,9 @@ Gui::Gui(AudioEffect* effect)
   _style = GUI_STYLE_ORIGINAL;
   _view_listener = NULL;
   _settings_open = false;
+  _user_preset = -1;
+  _name_edit = NULL;
+  _name_edit_result = 0;
   _relayout_requested = false;
 
   /*AEffGUIEditor*/ frame = 0;
@@ -203,6 +210,237 @@ void Gui::makePalette()
 }
 
 //-------------------------------------------------------------------------------------------------
+// DtBlkFix: user presets
+//-------------------------------------------------------------------------------------------------
+std::string Gui::userPresetDir(bool create)
+{
+  std::string dir;
+  const char* env = getenv("DTBLKFIX_PRESET_DIR");
+  if (env && *env)
+    dir = env;
+  else {
+    char docs[MAX_PATH] = {0};
+    if (FAILED(SHGetFolderPathA(NULL, CSIDL_PERSONAL, NULL, 0, docs)))
+      return "";
+    dir = std::string(docs) + "\\DtBlkFix";
+    if (create)
+      CreateDirectoryA(dir.c_str(), NULL);
+    dir += "\\Presets";
+  }
+  if (create)
+    CreateDirectoryA(dir.c_str(), NULL);
+  return dir;
+}
+
+//-------------------------------------------------------------------------------------------------
+static bool ReadPresetFile(const std::string& file, std::string* line)
+// the first line of a preset file
+{
+  FILE* f = fopen(file.c_str(), "rb");
+  if (!f)
+    return false;
+  char buf[4096] = {0};
+  bool ok = fgets(buf, sizeof(buf), f) != NULL;
+  fclose(f);
+  *line = buf;
+  while (!line->empty() && (line->back() == '\n' || line->back() == '\r'))
+    line->pop_back();
+  return ok && line->find(':') != std::string::npos;
+}
+
+//-------------------------------------------------------------------------------------------------
+void Gui::readUserPresets()
+{
+  _user_presets.clear();
+  std::string dir = userPresetDir(false);
+  if (dir.empty())
+    return;
+  WIN32_FIND_DATAA fd;
+  HANDLE h = FindFirstFileA((dir + "\\*.txt").c_str(), &fd);
+  if (h == INVALID_HANDLE_VALUE)
+    return;
+  do {
+    if (fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)
+      continue;
+    UserPreset p;
+    p.file = dir + "\\" + fd.cFileName;
+    std::string line;
+    if (!ReadPresetFile(p.file, &line))
+      continue;
+    p.name = line.substr(0, line.find(':'));
+    if (!p.name.empty())
+      _user_presets.push_back(p);
+  } while (FindNextFileA(h, &fd));
+  FindClose(h);
+  std::sort(_user_presets.begin(), _user_presets.end(), [](const UserPreset& a, const UserPreset& b) {
+    return _stricmp(a.name.c_str(), b.name.c_str()) < 0;
+  });
+}
+
+//-------------------------------------------------------------------------------------------------
+bool Gui::loadUserPreset(int k)
+// into the current program: every parameter (the host is told of each) and the name
+{
+  if (!idx_within(k, _user_presets))
+    return false;
+  std::string line;
+  if (!ReadPresetFile(_user_presets[k].file, &line))
+    return false;
+  DtBlkFx::BlkFxProgram prog(line.c_str());
+  for (int i = 0; i < BlkFxParam::TOTAL_NUM; i++)
+    blkFx()->setParameterAutomated(i, prog.params[i]);
+  blkFx()->setProgramName(prog.getName());
+  _user_preset = k;
+  if (_view_listener)
+    _view_listener->guiPresetLoaded();
+  if (_header)
+    _header->invalid(); // all of it: the number, name and buttons
+  return true;
+}
+
+//-------------------------------------------------------------------------------------------------
+bool Gui::saveUserPreset(const char* name_in)
+// the current program, as a user preset of this name (replacing one of the same name), which also
+// becomes the current program's name
+{
+  // a name of up to 31 characters, without ':' (it ends the name in the file)
+  std::string name = name_in;
+  for (size_t i = 0; i < name.size(); i++)
+    if (name[i] == ':' || (unsigned char)name[i] < ' ')
+      name[i] = '-';
+  while (!name.empty() && name.back() == ' ')
+    name.pop_back();
+  while (!name.empty() && name[0] == ' ')
+    name.erase(0, 1);
+  if (name.size() > 31)
+    name.resize(31);
+  if (name.empty())
+    return false;
+
+  // the file is named after it, with characters Windows won't take in a file name replaced
+  std::string dir = userPresetDir(true);
+  if (dir.empty())
+    return false;
+  std::string file_name = name;
+  for (size_t i = 0; i < file_name.size(); i++)
+    if (strchr("\\/:*?\"<>|", file_name[i]))
+      file_name[i] = '_';
+  std::string file = dir + "\\" + file_name + ".txt";
+
+  FILE* f = fopen(file.c_str(), "wb");
+  if (!f)
+    return false;
+  fprintf(f, "%s:", name.c_str());
+  for (int i = 0; i < BlkFxParam::TOTAL_NUM; i++)
+    fprintf(f, "%s%.9g", i ? " " : "", blkFx()->getCurrParam(i));
+  fprintf(f, "\r\n");
+  bool ok = fclose(f) == 0;
+  if (!ok)
+    return false;
+
+  CharArray<32> prog_name;
+  prog_name << name.c_str();
+  blkFx()->setProgramName(prog_name);
+  readUserPresets();
+  _user_preset = -1;
+  for (int k = 0; k < (int)_user_presets.size(); k++)
+    if (_user_presets[k].name == name)
+      _user_preset = k;
+  if (_view_listener)
+    _view_listener->guiPresetLoaded();
+  if (_header)
+    _header->invalid(); // all of it: the number, name and buttons
+  return true;
+}
+
+extern void* hInstance;
+
+//-------------------------------------------------------------------------------------------------
+static LRESULT CALLBACK NameEditProc(HWND wnd, UINT msg, WPARAM wp, LPARAM lp)
+// the name box: Enter saves, Escape (or losing the focus) cancels
+{
+  Gui* gui = (Gui*)GetWindowLongPtrA(wnd, GWLP_USERDATA);
+  WNDPROC base = (WNDPROC)GetPropA(wnd, "DtBlkFixBase");
+  if (gui) {
+    if (msg == WM_KEYDOWN && wp == VK_RETURN) {
+      gui->_name_edit_result = 1;
+      return 0;
+    }
+    if (msg == WM_KEYDOWN && wp == VK_ESCAPE) {
+      gui->_name_edit_result = 2;
+      return 0;
+    }
+    if (msg == WM_CHAR && (wp == '\r' || wp == 27 || wp == ':'))
+      return 0; // no beep, and no ':'
+    if (msg == WM_KILLFOCUS && !gui->_name_edit_result)
+      gui->_name_edit_result = 2;
+    if (msg == WM_GETDLGCODE)
+      return DLGC_WANTALLKEYS;
+  }
+  return CallWindowProcA(base, wnd, msg, wp, lp);
+}
+
+//-------------------------------------------------------------------------------------------------
+void Gui::startNameEdit()
+{
+  if (_name_edit || !frame || !_header)
+    return;
+  HWND parent = (HWND)frame->getSystemWindow();
+  // the editor's drawing mustn't paint over the box
+  SetWindowLongA(parent, GWL_STYLE, GetWindowLongA(parent, GWL_STYLE) | WS_CLIPCHILDREN);
+  // over the preset's name, in pixels
+  CRect r = Offset(TopLeft(_header), CastCRect(_header->_preset_menu));
+  int x0 = RndToInt(r.left * _scale), y0 = RndToInt(r.top * _scale);
+  int x1 = RndToInt(r.right * _scale), y1 = RndToInt(r.bottom * _scale);
+  HWND edit = CreateWindowExA(0, "EDIT", "", WS_CHILD | WS_VISIBLE | WS_BORDER | ES_AUTOHSCROLL,
+                              x0, y0, x1 - x0, y1 - y0, parent, NULL, (HINSTANCE)hInstance, NULL);
+  if (!edit)
+    return;
+  HFONT font = CreateFontA(-RndToInt(11.0f * _scale), 0, 0, 0, FW_BOLD, 0, 0, 0, ANSI_CHARSET,
+                           OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, DEFAULT_QUALITY,
+                           VARIABLE_PITCH | FF_SWISS, "Arial");
+  SetPropA(edit, "DtBlkFixFont", font);
+  SendMessageA(edit, WM_SETFONT, (WPARAM)font, TRUE);
+  SendMessageA(edit, EM_SETLIMITTEXT, 31, 0);
+  char name[256] = {0};
+  blkFx()->getProgramName(name);
+  SetWindowTextA(edit, name);
+  SendMessageA(edit, EM_SETSEL, 0, -1);
+  SetWindowLongPtrA(edit, GWLP_USERDATA, (LONG_PTR)this);
+  SetPropA(edit, "DtBlkFixBase", (HANDLE)GetWindowLongPtrA(edit, GWLP_WNDPROC));
+  SetWindowLongPtrA(edit, GWLP_WNDPROC, (LONG_PTR)NameEditProc);
+  _name_edit_result = 0;
+  _name_edit = edit;
+  SetFocus(edit);
+  if (_header)
+    _header->invalid(); // all of it: the number, name and buttons
+}
+
+//-------------------------------------------------------------------------------------------------
+void Gui::endNameEdit()
+{
+  HWND edit = (HWND)_name_edit;
+  if (!edit)
+    return;
+  char name[256] = {0};
+  GetWindowTextA(edit, name, sizeof(name));
+  int result = _name_edit_result;
+  _name_edit = NULL;
+  _name_edit_result = 0;
+  SetWindowLongPtrA(edit, GWLP_WNDPROC, (LONG_PTR)GetPropA(edit, "DtBlkFixBase"));
+  HFONT font = (HFONT)GetPropA(edit, "DtBlkFixFont");
+  RemovePropA(edit, "DtBlkFixBase");
+  RemovePropA(edit, "DtBlkFixFont");
+  DestroyWindow(edit);
+  if (font)
+    DeleteObject(font);
+  if (result == 1)
+    saveUserPreset(name);
+  if (_header)
+    _header->invalid(); // all of it: the number, name and buttons
+}
+
+//-------------------------------------------------------------------------------------------------
 void Gui::toggleSettings()
 // DtBlkFix: the listener reopens us, with the settings page or the spectrograms
 {
@@ -214,10 +452,12 @@ void Gui::toggleSettings()
 void Gui::selectProgram(int program)
 // DtBlkFix: the listener loads it and tells the host (and reopens us: the rows may change)
 {
-  if (_view_listener && program >= 0 && program < blkFx()->getNumPrograms())
+  if (_view_listener && program >= 0 && program < blkFx()->getNumPrograms()) {
+    _user_preset = -1;
     _view_listener->guiProgramChange(program);
+  }
   if (_header)
-    _header->setDirty();
+    _header->invalid(); // all of it: the number, name and buttons
 }
 
 //-------------------------------------------------------------------------------------------------
@@ -376,6 +616,7 @@ bool Gui::open(void* system_window)
 
   // DtBlkFix: the header (preset & settings)
   if (headHeight() > 0) {
+    readUserPresets();
     NewView(_header, frame);
     _header->init(this, CRect(p.x, p.y, p.x + _images.glob_bg->getWidth(), p.y + headHeight()));
     p.y += headHeight();
@@ -577,6 +818,12 @@ void Gui::close()
 {
   LOGG("", "Gui::close" << VAR(this) << VAR(frame));
 
+  // DtBlkFix: a name being typed is dropped
+  if (_name_edit) {
+    _name_edit_result = 2;
+    endNameEdit();
+  }
+
   _ok = false;
 
   // assume blkfx hasn't been deleted yet, make sure that we are sync'd with it before going on
@@ -613,6 +860,10 @@ void Gui::idle()
 
   if (!_ok)
     return;
+
+  // DtBlkFix: a name typed to save as (Enter), or cancelled
+  if (_name_edit && _name_edit_result)
+    endNameEdit();
 
   // if (/*AEffGUIEditor::*/inIdleStuff) return;
 
@@ -910,9 +1161,9 @@ CMouseEventResult FxAddRow::onMouseExited(CPoint& mouse, const long& buttons)
 //*************************************************************************************************
 
 // where things are in the header (view units, the header is 410 x 22): the preset's number, its
-// name (a list), previous & next, and the gear at the right
-static const CRect g_head_num(4, 3, 42, 19), g_head_name(45, 3, 241, 19),
-    g_head_prev(244, 3, 262, 19), g_head_next(265, 3, 283, 19);
+// name (a list), previous & next, save, and the gear at the right
+static const CRect g_head_num(4, 3, 42, 19), g_head_name(45, 3, 223, 19),
+    g_head_prev(226, 3, 244, 19), g_head_next(247, 3, 265, 19), g_head_save(268, 3, 286, 19);
 static const int HEAD_GEAR_W = 20;
 
 //-------------------------------------------------------------------------------------------------
@@ -1031,7 +1282,9 @@ void HeaderButton::setSize(CastCRect r)
 CMouseEventResult HeaderButton::onMouseDown(CPoint& mouse, const long& buttons)
 {
   if (buttons & kLButton) {
-    if (_step)
+    if (_step == 2)
+      _header->_gui->startNameEdit();
+    else if (_step)
       _header->step(_step);
     else
       _header->_gui->toggleSettings();
@@ -1058,7 +1311,6 @@ HeaderCtrl::HeaderCtrl()
     : CViewContainer(CRect(), /*frame*/ NULL, /*background*/ NULL)
 {
   _num_presets = 0;
-  _reset_entry = -1;
 }
 
 //-------------------------------------------------------------------------------------------------
@@ -1090,26 +1342,50 @@ void HeaderCtrl::init(Gui* gui, CastCRect rect)
   _next->setSize(g_head_next);
   AddView(_next, this);
 
-  // the presets, then (after a separator) the last program, which resets the current one
+  _save.setNew(new HeaderButton(this, 2));
+  _save->setSize(g_head_save);
+  AddView(_save, this);
+
+  // the list: the factory presets (dividers as separators), the user presets, then the last
+  // program, which resets the current one
   DtBlkFx* fx = _gui->blkFx();
   int n = (int)fx->getNumPrograms();
   _num_presets = std::max(n - 1, 1);
   _preset_menu.New();
   _preset_menu->setSize(g_head_name);
   _preset_menu->setListener(this);
-  // (one entry per program, so an entry's index is its program; dividers are separators)
+  _entry.clear();
+  int curr = -1;
   for (int i = 0; i < _num_presets; i++) {
     char name[256] = {0};
     fx->getProgramNameIndexed(0, i, name);
-    _preset_menu->addEntry(divider(i) ? "-" : name, i);
+    bool div = divider(i);
+    _preset_menu->addEntry(div ? "-" : name);
+    _entry.push_back(div ? -1 : i);
+    if (i == fx->getProgram() && _gui->_user_preset < 0)
+      curr = (int)_entry.size() - 1;
+  }
+  if (!_gui->_user_presets.empty()) {
+    if (!divider(_num_presets - 1)) {
+      _preset_menu->addEntry("-");
+      _entry.push_back(-1);
+    }
+    _preset_menu->addEntry(kMenuTitle "User");
+    _entry.push_back(-1);
+    for (int k = 0; k < (int)_gui->_user_presets.size(); k++) {
+      _preset_menu->addEntry(_gui->_user_presets[k].name.c_str());
+      _entry.push_back(-(k + 2));
+      if (k == _gui->_user_preset)
+        curr = (int)_entry.size() - 1;
+    }
   }
   if (n > _num_presets) {
-    if (!divider(_num_presets - 1))
-      _preset_menu->addEntry("-");
-    _reset_entry = (int)_preset_menu->getNbEntries();
+    _preset_menu->addEntry("-");
+    _entry.push_back(-1);
     _preset_menu->addEntry("Reset this preset");
+    _entry.push_back(RESET_ENTRY);
   }
-  _preset_menu->setCurrent(fx->getProgram());
+  _preset_menu->setCurrent(curr);
   AddView(_preset_menu, this);
 
   _gear.setNew(new HeaderButton(this, 0));
@@ -1118,17 +1394,39 @@ void HeaderCtrl::init(Gui* gui, CastCRect rect)
 }
 
 //-------------------------------------------------------------------------------------------------
+std::vector<int> HeaderCtrl::bank()
+{
+  std::vector<int> b;
+  for (int i = 0; i < _num_presets; i++)
+    if (!divider(i))
+      b.push_back(i);
+  for (int k = 0; k < (int)_gui->_user_presets.size(); k++)
+    b.push_back(-(k + 1));
+  return b;
+}
+
+int HeaderCtrl::bankPos()
+{
+  std::vector<int> b = bank();
+  int want = _gui->_user_preset >= 0 ? -(_gui->_user_preset + 1) : _gui->blkFx()->getProgram();
+  for (int i = 0; i < (int)b.size(); i++)
+    if (b[i] == want)
+      return i;
+  return -1;
+}
+
+//-------------------------------------------------------------------------------------------------
 void HeaderCtrl::step(int dir)
 {
-  int p = _gui->blkFx()->getProgram();
-  if (p < 0 || p >= _num_presets)
-    p = 0;
-  for (int i = 0; i < _num_presets; i++) {
-    p = (p + dir + _num_presets) % _num_presets;
-    if (!divider(p))
-      break;
-  }
-  _gui->selectProgram(p);
+  std::vector<int> b = bank();
+  if (b.empty())
+    return;
+  int n = (int)b.size(), pos = bankPos();
+  pos = pos < 0 ? 0 : (pos + dir + n) % n;
+  if (b[pos] >= 0)
+    _gui->selectProgram(b[pos]);
+  else
+    _gui->loadUserPreset(-b[pos] - 1);
 }
 
 //-------------------------------------------------------------------------------------------------
@@ -1137,10 +1435,15 @@ void HeaderCtrl::valueChanged(CControl* ctrl)
   if (ctrl != _preset_menu)
     return;
   int sel = (int)ctrl->getValue();
-  if (sel >= 0 && sel < _num_presets && !divider(sel))
-    _gui->selectProgram(sel);
-  else if (sel == _reset_entry) // reset the current program
+  if (sel < 0 || sel >= (int)_entry.size())
+    return;
+  int what = _entry[sel];
+  if (what >= 0)
+    _gui->selectProgram(what);
+  else if (what == RESET_ENTRY) // reset the current program to its factory settings
     _gui->selectProgram(_num_presets);
+  else if (what <= -2)
+    _gui->loadUserPreset(-what - 2);
 }
 
 //-------------------------------------------------------------------------------------------------
@@ -1166,10 +1469,10 @@ void HeaderCtrl::drawRect(CDrawContext* context, const CRect& update_rect_)
     bg->blend(temp_bm, CRect(0, y, w, std::min(y + 5, h)), CPoint(0, 21), 255, false);
 
   // the preset's number
-  int prog = _gui->blkFx()->getProgram();
+  int pos = bankPos();
   CharArray<32> num;
-  if (prog >= 0 && prog < _num_presets)
-    num << (prog + 1) << "/" << _num_presets;
+  if (pos >= 0)
+    num << (pos + 1) << "/" << (int)bank().size();
   else
     num << "-";
   DrawBox(temp_bm, g_head_num, pal.box, pal.box_line);
@@ -1200,6 +1503,19 @@ void HeaderCtrl::drawRect(CDrawContext* context, const CRect& update_rect_)
               7.0f,
               i ? +1 : -1,
               b->_hover ? pal.hover : pal.value);
+  }
+
+  // save: a floppy disk
+  {
+    CRect sr = g_head_save;
+    bool hot = _save->_hover || _gui->_name_edit;
+    CColor c = hot ? pal.hover : pal.value;
+    DrawBox(temp_bm, sr, pal.box, hot ? pal.hover : pal.box_line);
+    int cx = (sr.left + sr.right) / 2, cy = (sr.top + sr.bottom) / 2;
+    // body, the shutter's slot at the top (off to the right) and the label at the bottom
+    DrawBox(temp_bm, CRect(cx - 5, cy - 5, cx + 5, cy + 5), c, c, 1);
+    DrawBox(temp_bm, CRect(cx - 1, cy - 5, cx + 3, cy - 2), pal.box, pal.box, 0);
+    DrawBox(temp_bm, CRect(cx - 3, cy + 1, cx + 3, cy + 4), pal.box, pal.box, 0);
   }
 
   // the gear (lit while the settings page is open)

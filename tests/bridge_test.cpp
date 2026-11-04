@@ -10,6 +10,8 @@
 // 4. In both styles, clicking "+" adds a do-nothing filter after the last effect, clicking a
 //    row's "x" removes that effect and moves the ones below up, the header's next & previous
 //    buttons load the next & previous presets, and its gear opens & closes the settings page.
+// 5. Saving the current program as a user preset (a name typed in the header) writes its file and
+//    renames the program; next & previous reach it, and loading it brings back every parameter.
 
 #define NOMINMAX
 #include <windows.h>
@@ -17,6 +19,8 @@
 #include <math.h>
 #include <stdio.h>
 #include <string.h>
+
+#include <string>
 
 #include "EngineBridge.h"
 #include "PluginState.h"
@@ -117,6 +121,24 @@ static std::vector<float> render(Engine& e, SkinSwitcher* switcher = nullptr)
 
 int main()
 {
+  // user presets go to a folder of the test's own, emptied first
+  char tmp[MAX_PATH] = {0};
+  GetTempPathA(MAX_PATH, tmp);
+  std::string preset_dir = std::string(tmp) + "dtblkfix_test_presets";
+  CreateDirectoryA(preset_dir.c_str(), NULL);
+  {
+    WIN32_FIND_DATAA fd;
+    HANDLE h = FindFirstFileA((preset_dir + "\\*.txt").c_str(), &fd);
+    if (h != INVALID_HANDLE_VALUE) {
+      do
+        DeleteFileA((preset_dir + "\\" + fd.cFileName).c_str());
+      while (FindNextFileA(h, &fd));
+      FindClose(h);
+    }
+  }
+  SetEnvironmentVariableA("DTBLKFIX_PRESET_DIR", preset_dir.c_str());
+  _putenv_s("DTBLKFIX_PRESET_DIR", preset_dir.c_str());
+
   if (!Engine::init()) {
     printf("FAIL: engine init (is the dtblkfx folder next to the test?)\n");
     return 1;
@@ -286,14 +308,14 @@ int main()
 
     // the header's next & previous preset buttons load the program and tell the wrapper
     int changes = listener.program_changes;
-    click(frame, 274, 11);
+    click(frame, 256, 11);
     Engine ref(&listener);
     ref.setProgram(34);
     bool loaded = true;
     for (int i = 0; i < e.numParams(); i++)
       loaded = loaded && e.getParam(i) == ref.getParam(i);
     bool next_ok = e.getProgram() == 34 && loaded && listener.program_changes == changes + 1;
-    click(frame, 253, 11);
+    click(frame, 235, 11);
     check(next_ok && e.getProgram() == 33 && listener.program_changes == changes + 2,
           "header: next preset, then previous");
 
@@ -319,6 +341,66 @@ int main()
 
     e.closeEditor();
     DestroyWindow(wnd);
+  }
+
+  // --- 5. saving the current program as a user preset, and loading it again
+  {
+    NoListener pl;
+    Engine e(&pl);
+    e.setProgram(33);
+    e.setParam(0, 0.25f); // MixBack, so it isn't the factory preset
+    std::vector<float> saved_params;
+    for (int i = 0; i < e.numParams(); i++)
+      saved_params.push_back(e.getParam(i));
+    int w = 0, h = 0;
+    e.editorSize(100, w, h);
+    HWND wnd = (HWND)e.createEditorWindow(w, h);
+    e.openEditor(wnd, 100, 0, 0);
+    HWND frame = GetWindow(wnd, GW_CHILD);
+
+    // save: a name box over the preset's name; Enter saves (':' isn't allowed in a name)
+    click(frame, 277, 11);
+    HWND edit = FindWindowExA(frame, NULL, "EDIT", NULL);
+    if (edit) {
+      SetWindowTextA(edit, "Test: one");
+      SendMessageA(edit, WM_KEYDOWN, VK_RETURN, 0);
+    }
+    e.idleEditor();
+    std::string file = preset_dir + "\\Test- one.txt";
+    FILE* f = fopen(file.c_str(), "rb");
+    char line[4096] = {0};
+    if (f) {
+      fgets(line, sizeof(line), f);
+      fclose(f);
+    }
+    check(edit != NULL && f != NULL && strncmp(line, "Test- one:", 10) == 0 &&
+              e.programName(33) == "Test- one" && pl.program_changes == 1 &&
+              FindWindowExA(frame, NULL, "EDIT", NULL) == NULL,
+          "save: the name typed becomes a user preset file, and the program's name");
+
+    // the wrapper reopens the editor; change something, then go to the factory preset before the
+    // user preset and back to the user preset
+    e.closeEditor();
+    e.openEditor(wnd, 100, 0, 0);
+    frame = GetWindow(wnd, GW_CHILD);
+    e.setParam(0, 0.75f);
+    click(frame, 235, 11); // previous: the last factory preset
+    bool factory = e.getProgram() != 33 && e.getParam(0) != 0.25f;
+    int prog = e.getProgram();
+    click(frame, 256, 11); // next: the user preset
+    bool same = true;
+    for (int i = 0; i < e.numParams(); i++)
+      same = same && e.getParam(i) == saved_params[i];
+    check(factory && same && e.getProgram() == prog && e.programName(prog) == "Test- one",
+          "load: next from the last factory preset loads the user preset, every parameter");
+
+    // the user preset is in the list after a reopen (read from its folder)
+    e.closeEditor();
+    e.openEditor(wnd, 100, 0, 0);
+    e.idleEditor();
+    e.closeEditor();
+    DestroyWindow(wnd);
+    DeleteFileA(file.c_str());
   }
 
   printf("%s\n", g_failed ? "FAILED" : "all passed");

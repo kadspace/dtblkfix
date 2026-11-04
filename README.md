@@ -11,11 +11,11 @@ DtBlkFx is Darrell Tam's FFT effect from 2005–2006: up to eight spectral effec
 - **Window size.** The original is a fixed 410 by 409 pixel window, which is tiny on a modern screen. In DtBlkFix you drag the window to any size and shape, and the editor scales to fill it (from 75 to 300%), or you pick 75, 100, 125, 150 or 200% in the settings. Text and lines are drawn at the new size, so it stays sharp.
 - **Skins.** The original look, plus Dark and Warm. A skin is just the folder of images the plugin already loads, so you can make your own.
 - **Easier to read.** Style **Boxes** puts each value in a box, in the top strip and the effect rows. **Original** keeps DtBlkFx's outlined text.
-- **Presets and settings at the top.** A bar across the top of the editor shows the preset: its number, its name (click it for the list), and ← → for the previous and next. The gear at the right opens the settings: Size, Skin (Original, Dark, Warm) and Style.
+- **Presets and settings at the top.** A bar across the top of the editor shows the preset: its number, its name (click it for the list), ← → for the previous and next, and a save button for your own presets. The gear at the right opens the settings: Size, Skin (Original, Dark, Warm) and Style.
 - **Effect rows.** The original always showed eight effect rows, most of them empty. DtBlkFix shows only the effects in use. **+** below them adds one, and the **×** at the left end of a row removes it.
 - **Format.** DtBlkFix is a 64-bit VST3.
 
-Apart from Sync, the audio is bit-identical to the original. That's the whole list. There are no new effects. The only new controls are the preset bar, + and ×, and Size, Skin and Style; Delay and Sync are gone, and BlkLen shows the block length in ms and samples.
+Apart from Sync, the audio is bit-identical to the original. That's the whole list. There are no new effects. The only new controls are the preset bar (with saving your own presets), + and ×, and Size, Skin and Style; Delay and Sync are gone, and BlkLen shows the block length in ms and samples.
 
 ## Installing
 
@@ -27,7 +27,9 @@ DtBlkFix has its own plugin ID, so it installs next to the original DtBlkFx and 
 
 ## Presets, effects, size, skin and style
 
-The bar at the top shows the preset. Click ◀ or ▶ for the previous or next one, or click its name for the list. **Reset this preset**, at the end of the list, puts the current preset back as it was.
+The bar at the top shows the preset. Click ← or → for the previous or next one, or click its name for the list. **Reset this preset**, at the end of the list, puts the current preset back as it was.
+
+To save your own, click the save button next to the arrows, type a name and press Enter (Escape cancels). Your presets are listed under **User**, after the factory ones, and ← → go through them too. Each is a small text file in `Documents\DtBlkFix\Presets`, so you can back them up or share them; saving under a name that's already there replaces it, and deleting the file deletes the preset.
 
 Each row is an effect, run in order from the top. Click **+** below the last row to add one: it starts as a Filter over the whole range at 0 dB, which leaves the sound alone until you change it. Hover over a row and click the **×** at its left end to remove it; the effects below move up. An effect counts as in use if any of its settings isn't zero, which is what an empty slot is in the presets.
 
