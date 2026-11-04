@@ -66,23 +66,21 @@ template <class STR> void BlkLenText(STR& str, int samps, float sample_rate)
 }
 
 //-------------------------------------------------------------------------------------------------
-// DtBlkFix: the global controls are one line: each label, cut from the image and drawn at
-// GLOB_LABEL_SCALE, with its value beside it on the same baseline, the 4 pairs evenly spaced
+// DtBlkFix: the global controls are one line of label & value pairs, the same space at each end
+// as between them. The values are plain text, or in boxes sized for their widest value (style
+// "boxes", see Gui::boxes()).
 static const struct {
-  int x0, x1;      // the label's glyphs in the image
-  const char* typ; // a usual value, for the spacing
-} g_glob_lbl[4] = {
-    {2, 69, "50%"}, {82, 129, "match"}, {207, 273, "60%"}, {347, 404, "92.9 ms \xb7 4096"}};
-// label rows in the image, 1 to 22: 21 rows (15 at GLOB_LABEL_SCALE) with the baseline 14 rows (10)
-// down, so both land on whole view units
-static const int GLOB_LBL_Y0 = 1, GLOB_LBL_Y1 = 22, GLOB_LBL_BASE = 15;
-static const int GLOB_LBL_PAD = 4;    // glow around the glyphs
-static const int GLOB_LBL_GAP = 6;    // between label and value
-static const int GLOB_VAL_FONT = 11;  // value font size: its capitals are as tall as the labels'
-static const float GLOB_BASELINE = 15.0f; // baseline of the labels in the strip
-// the values sit this much lower: their bold capitals are taller than the labels', which are mostly
-// lower case, so on one baseline the values look high
-static const int GLOB_VAL_DY = 2;
+  const char* label;
+  const char* typ;    // a usual value, to place the controls before the first draw
+  const char* widest; // the widest value, for the boxes
+} g_glob_col[4] = {{"MixBack", "50%", "100%"},
+                   {"Power", "match", "match"},
+                   {"Overlap", "60%", "85%"},
+                   {"BlkLen", "92.9 ms \xb7 4096", "1829 ms \xb7 80640"}};
+static const int GLOB_FONT = 11;    // labels & values, so they share a baseline
+static const int GLOB_GAP = 5;      // between label & value
+static const int GLOB_BOX_PAD = 5;  // either side of the value in its box
+static const int GLOB_BOX_INSET = 4; // box from the top & bottom of the strip
 
 //-------------------------------------------------------------------------------------------------
 bool /*success*/ GlobalCtrl::init(Gui* gui, CastCRect rect)
@@ -167,7 +165,7 @@ bool /*success*/ GlobalCtrl::init(Gui* gui, CastCRect rect)
   // DtBlkFix: place the controls (drawRect redoes this for the actual values)
   const char* typ[4];
   for (i = 0; i < 4; i++)
-    typ[i] = g_glob_lbl[i].typ;
+    typ[i] = g_glob_col[i].typ;
   layout(typ);
 
   //
@@ -178,24 +176,35 @@ bool /*success*/ GlobalCtrl::init(Gui* gui, CastCRect rect)
 }
 
 //-------------------------------------------------------------------------------------------------
+int GlobalCtrl::valueWidth(int i, const char* val)
+// DtBlkFix: room for value i: its text, or its box (the same whatever the value)
+{
+  CContextRGBA* temp_bm = &_gui->_temp_bm;
+  temp_bm->setFont(kNormalFont, GLOB_FONT, kBoldFace);
+  if (_gui->boxes())
+    return (int)StringWidth(temp_bm, g_glob_col[i].widest) + 2 * GLOB_BOX_PAD;
+  return (int)StringWidth(temp_bm, val);
+}
+
+//-------------------------------------------------------------------------------------------------
 void GlobalCtrl::layout(const char* const val[4])
-// DtBlkFix: lay out the one line (see g_glob_lbl) for these values, with the same space at each
-// end as between the label & value pairs, and fit the controls to it
+// DtBlkFix: lay out the one line for these values, with the same space at each end as between
+// the label & value pairs, and fit the controls to it
 {
   int i, w = getWidth(), h = getHeight();
   CContextRGBA* temp_bm = &_gui->_temp_bm;
-  temp_bm->setFont(kNormalFont, GLOB_VAL_FONT, kBoldFace);
   float lbl_w[4], used = 0.0f;
   for (i = 0; i < 4; i++) {
-    lbl_w[i] = (float)(g_glob_lbl[i].x1 - g_glob_lbl[i].x0) * GLOB_LABEL_SCALE;
-    _val_w[i] = StringWidth(temp_bm, val[i]);
-    used += lbl_w[i] + GLOB_LBL_GAP + (float)_val_w[i];
+    _val_w[i] = valueWidth(i, val[i]);
+    temp_bm->setFont(kNormalFont, GLOB_FONT, kNormalFace);
+    lbl_w[i] = (float)StringWidth(temp_bm, g_glob_col[i].label);
+    used += lbl_w[i] + GLOB_GAP + (float)_val_w[i];
   }
   float gap = std::max((float)w - used, 0.0f) / 5.0f, pos = gap;
   int end[4];
   for (i = 0; i < 4; i++) {
     _lbl_x[i] = pos;
-    pos += lbl_w[i] + GLOB_LBL_GAP;
+    pos += lbl_w[i] + GLOB_GAP;
     _val_x[i] = RndToInt(pos);
     pos += (float)_val_w[i];
     end[i] = RndToInt(pos);
@@ -227,9 +236,6 @@ void GlobalCtrl::drawRect(CDrawContext* context, const CRect& update_rect_)
   // make sure that our dirty flag is cleared
   setDirty(false);
 
-  // colours
-  CColorRGB focus_txt_col(0xff, 0x80, 0x80), normal_txt_col(0xff, 0xff, 0xff);
-
   // temporary bitmap to draw into
   CContextRGBA* temp_bm = &_gui->_temp_bm;
 
@@ -248,10 +254,9 @@ void GlobalCtrl::drawRect(CDrawContext* context, const CRect& update_rect_)
   BlkLenText(val[3], g_fft_sz[getBlkSzPlan()], blkFx()->getSampleRate());
 
   // a value changed width: lay out again and draw it all
-  temp_bm->setFont(kNormalFont, GLOB_VAL_FONT, kBoldFace);
   bool all = false;
   for (int i = 0; i < 4; i++)
-    if (StringWidth(temp_bm, val[i]) != _val_w[i])
+    if (valueWidth(i, val[i]) != _val_w[i])
       all = true;
   if (all) {
     const char* v[4] = {val[0], val[1], val[2], val[3]};
@@ -264,34 +269,15 @@ void GlobalCtrl::drawRect(CDrawContext* context, const CRect& update_rect_)
   temp_bm->setClipRect(rel_update_rect);
 
   // copy background bitmap into our offscreen
-  // DtBlkFix: the image has 6 labels over 2 lines; rebuild it as one line with the 4 that are
-  // left (see g_glob_lbl): plain background from the label-free rows at the bottom, then each
-  // label with its glow, smaller, and the value beside it
+  // DtBlkFix: the image has 6 labels over 2 lines; only its plain background is used, from the
+  // label-free rows at the bottom, and the labels are text
   CContextRGBA* bg = _gui->_images.glob_bg;
   int bg_w = bg->getWidth(), bg_h = getHeight();
   for (int y = 0; y < bg_h; y += 5)
     bg->blend(temp_bm, CRect(0, y, bg_w, std::min(y + 5, bg_h)), CPoint(0, 21), 255, false);
 
-  // labels (the values are GLOB_VAL_DY lower)
-  float k = GLOB_LABEL_SCALE, top = GLOB_BASELINE - (GLOB_LBL_BASE - GLOB_LBL_Y0) * k;
-  for (int i = 0; i < 4; i++) {
-    CRect src(std::max(g_glob_lbl[i].x0 - GLOB_LBL_PAD, 0),
-              GLOB_LBL_Y0,
-              std::min(g_glob_lbl[i].x1 + GLOB_LBL_PAD, (int)bg->getWidth()),
-              GLOB_LBL_Y1);
-    float x = _lbl_x[i] + (float)(src.left - g_glob_lbl[i].x0) * k;
-    CRect dst(RndToInt(x),
-              RndToInt(top),
-              RndToInt(x + src.width() * k),
-              RndToInt(top + src.height() * k));
-    _gui->_images.glob_lbl->blend(temp_bm, dst, src, 255, false);
-  }
-
-  // values: dark on a light skin with a light outline (as everywhere), light on a dark skin with a
-  // dark outline (the light outline swamps the small type)
-  unsigned long bg_col = PtrRGBA(bg->data())._get(); // bottom left, plain background
-  bool dark_bg = ((bg_col >> 16) & 0xff) * 3 + ((bg_col >> 8) & 0xff) * 6 + (bg_col & 0xff) < 1280;
-  temp_bm->setFont(kNormalFont, GLOB_VAL_FONT, kBoldFace);
+  // labels & values
+  const GuiPalette& pal = _gui->_palette;
   CView* view[4] = {_mixback, _pwrmatch, _overlap, _blksz};
   bool focus[4] = {_mixback->getState() != _mixback->INACTIVE,
                    _pwrmatch->getState() != _pwrmatch->INACTIVE,
@@ -300,13 +286,26 @@ void GlobalCtrl::drawRect(CDrawContext* context, const CRect& update_rect_)
   for (int i = 0; i < 4; i++) {
     if (!ShouldDrawView(update_rect, view[i]))
       continue;
-    CColor txt_col = focus[i] ? focus_txt_col : normal_txt_col, black = CColorRGB(0, 0, 0);
-    temp_bm->setFontColor(dark_bg ? black : txt_col);  // outline
-    temp_bm->setFillColor(dark_bg ? txt_col : black);  // inside
-    OutlineDrawString(temp_bm,
-                      CRect(_val_x[i], GLOB_VAL_DY, _val_x[i] + _val_w[i] + 10, bg_h + GLOB_VAL_DY),
-                      val[i],
-                      kLeftText);
+    temp_bm->setFont(kNormalFont, GLOB_FONT, kNormalFace);
+    temp_bm->setFontColor(pal.label);
+    temp_bm->drawString(g_glob_col[i].label,
+                        CRect(RndToInt(_lbl_x[i]), 0, _val_x[i], bg_h),
+                        /*opaque*/ 0,
+                        kLeftText);
+
+    CRect r(_val_x[i], 0, _val_x[i] + _val_w[i], bg_h);
+    if (_gui->boxes()) {
+      r.top += GLOB_BOX_INSET;
+      r.bottom -= GLOB_BOX_INSET;
+      DrawBox(temp_bm, r, pal.box, focus[i] ? pal.hover : pal.box_line);
+    }
+    temp_bm->setFont(kNormalFont, GLOB_FONT, kBoldFace);
+    temp_bm->setFontColor(focus[i] ? pal.hover : pal.value);
+    // a box is centred on the strip, so its text shares the labels' baseline
+    temp_bm->drawString(val[i],
+                        _gui->boxes() ? r : CRect(r.left, 0, r.right + 10, bg_h),
+                        /*opaque*/ 0,
+                        _gui->boxes() ? kCenterText : kLeftText);
   }
 
   // blend region to update onto the screen

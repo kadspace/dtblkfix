@@ -83,10 +83,11 @@ public:
   //
   int _text_height;
 
-  // DtBlkFix: where each label and value starts, and the width of the values laid out for (one
-  // line, see g_glob_lbl and layout())
+  // DtBlkFix: where each label and value starts, and the room for each value laid out for (one
+  // line, see g_glob_col and layout())
   float _lbl_x[4];
   int _val_x[4], _val_w[4];
+  int valueWidth(int i, const char* val);
   void layout(const char* const val[4]);
 
   // true if all sub windows init'd ok

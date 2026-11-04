@@ -3,7 +3,8 @@
 // dtblkfix_plugin_test   (needs the "dtblkfx" folder next to it, as the plugin does)
 //
 // Parameters map 1:1 to the engine's, and a state round trip through the processor brings back
-// every parameter, the program and program names, the editor size and skin, and the latency.
+// every parameter, the program and program names, the editor size, skin and style, and the
+// latency.
 
 #include "PluginProcessor.h"
 
@@ -57,6 +58,7 @@ int main()
   a->changeProgramName(5, "renamed");
   a->view.scale_pct = 150;
   a->view.skin = "Dark";
+  a->view.style = 1;
   juce::MemoryBlock state;
   a->getStateInformation(state);
 
@@ -71,8 +73,8 @@ int main()
   for (int i = 0; i < a->getNumPrograms(); i++)
     names = names && b->getProgramName(i) == a->getProgramName(i);
   check(names && b->getProgramName(5) == "renamed", "program names come back");
-  check(b->view.scale_pct == 150 && b->view.skin == "Dark",
-        "editor size 150% & Dark skin come back");
+  check(b->view.scale_pct == 150 && b->view.skin == "Dark" && b->view.style == 1,
+        "editor size 150%, Dark skin & boxes style come back");
   check(b->getLatencySamples() == a->getLatencySamples() && a->getLatencySamples() > 0,
         "latency comes back: " + juce::String(b->getLatencySamples()));
   juce::MemoryBlock state_b;
@@ -92,7 +94,7 @@ int main()
           rows++;
           break;
         }
-    int view_h = 22 + 191 + 24 * (rows + (rows < 8 ? 1 : 0));
+    int view_h = 24 + 191 + 24 * (rows + (rows < 8 ? 1 : 0));
     check(editor != nullptr && w == 615 && h == (int)(view_h * 1.5f + 0.5f),
           "editor created for 615x" + juce::String(h) + " pixels (" + juce::String(rows) +
               " effects)");

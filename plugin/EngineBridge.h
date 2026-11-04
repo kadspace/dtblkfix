@@ -27,8 +27,9 @@ public:
   virtual void beginEdit(int index) = 0;
   virtual void endEdit(int index) = 0;
   virtual void latencyChanged() = 0;
-  // Size or Skin picked in the editor (called from inside the editor's event handling)
-  virtual void viewChangeRequested(int scale_pct, int skin_idx) = 0;
+  // Size, Skin or Style picked in the editor, or its rows changed (called from inside the
+  // editor's event handling)
+  virtual void viewChangeRequested(int scale_pct, int skin_idx, int style) = 0;
 };
 
 class Engine {
@@ -75,7 +76,7 @@ public:
   bool hasEditor() const;
   void editorSize(int scale_pct, int& width, int& height) const;
   void* createEditorWindow(int width, int height);
-  bool openEditor(void* window, int scale_pct, int skin_idx);
+  bool openEditor(void* window, int scale_pct, int skin_idx, int style = 0);
   void closeEditor();
   void idleEditor();
 

@@ -119,9 +119,9 @@ struct Engine::Impl
   }
   virtual void beginEdit(VstInt32 index) { listener->beginEdit(index); }
   virtual void endEdit(VstInt32 index) { listener->endEdit(index); }
-  virtual void guiViewChange(int scale_pct, int skin_idx)
+  virtual void guiViewChange(int scale_pct, int skin_idx, int style)
   {
-    listener->viewChangeRequested(scale_pct, skin_idx);
+    listener->viewChangeRequested(scale_pct, skin_idx, style);
   }
 };
 
@@ -304,7 +304,7 @@ void* Engine::createEditorWindow(int width, int height)
                          NULL);
 }
 
-bool Engine::openEditor(void* window, int scale_pct, int skin_idx)
+bool Engine::openEditor(void* window, int scale_pct, int skin_idx, int style)
 {
   Gui* gui = impl->fx->gui();
   if (!gui || !window)
@@ -323,7 +323,7 @@ bool Engine::openEditor(void* window, int scale_pct, int skin_idx)
     if (!DtBlkFixLoadImages(SkinDir(0).c_str(), scale, &images, &err))
       return false;
   }
-  gui->setView(scale, images, skins, skin_idx, scales(), impl);
+  gui->setView(scale, images, skins, skin_idx, style, scales(), impl);
   return gui->open(window);
 }
 

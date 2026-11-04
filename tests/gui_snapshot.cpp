@@ -1,7 +1,7 @@
 // DtBlkFix tests: open the editor in a window, play audio through it and save a screenshot.
 //
 // dtblkfix_gui_snapshot <folder holding dtblkfx\> <out.png> [--scale s] [--skin folder]
-//                       [--preset n]
+//                       [--preset n] [--style 0 (original) | 1 (boxes)]
 //
 // For looking at UI scaling and skins (CI uploads the screenshots).
 
@@ -19,7 +19,7 @@ bool DtBlkFixLoadImages(const char* skin_dir, float scale, GuiImages* dst, ostre
 
 // show the Size & Skin menus as the plugin does
 struct NoViewChange : public GuiViewListener {
-  virtual void guiViewChange(int, int) {}
+  virtual void guiViewChange(int, int, int) {}
 };
 
 static bool WritePng(const char* file, int w, int h, const std::vector<unsigned char>& rgb)
@@ -65,13 +65,16 @@ int main(int argc, char** argv)
 {
   if (argc < 3) {
     fprintf(
-        stderr, "usage: %s <dir> <out.png> [--scale s] [--skin folder] [--preset n]\n", argv[0]);
+        stderr,
+        "usage: %s <dir> <out.png> [--scale s] [--skin folder] [--preset n] [--style 0|1]\n",
+        argv[0]);
     return 2;
   }
   float scale = 1.0f;
   const char* skin = NULL;
   int preset = 33;
   int hold_ms = 0; // keep the editor live this long before the screenshot
+  int style = 0;
   for (int i = 3; i + 1 < argc; i += 2) {
     if (!strcmp(argv[i], "--scale"))
       scale = (float)atof(argv[i + 1]);
@@ -81,6 +84,8 @@ int main(int argc, char** argv)
       preset = atoi(argv[i + 1]);
     else if (!strcmp(argv[i], "--hold"))
       hold_ms = atoi(argv[i + 1]) * 1000;
+    else if (!strcmp(argv[i], "--style"))
+      style = atoi(argv[i + 1]);
   }
 
   // pixels are pixels (StdAfx.h targets Windows 2000, so look this up)
@@ -113,7 +118,7 @@ int main(int argc, char** argv)
     return 1;
   std::vector<std::string> skins(1, "Original");
   int scales[] = {75, 100, 125, 150, 200};
-  gui->setView(scale, images, skins, 0, std::vector<int>(scales, scales + 5), &listener);
+  gui->setView(scale, images, skins, 0, style, std::vector<int>(scales, scales + 5), &listener);
   gui->layoutRows(); // the effect rows in use decide the height
 
   // a window to hold the editor

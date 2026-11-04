@@ -58,7 +58,7 @@ void DtBlkFixEditor::openEditor()
     juce::ScopedThreadDPIAwarenessSetter dpi_awareness(peer->getNativeHandle());
     void* window = engine.createEditorWindow(_pix_width, _pix_height);
     _host.setHWND(window);
-    engine.openEditor(window, scale_pct, skin_idx);
+    engine.openEditor(window, scale_pct, skin_idx, _processor.view.style);
   }
   _open = true;
   _display_scale = 0.0f;

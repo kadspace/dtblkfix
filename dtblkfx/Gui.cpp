@@ -45,7 +45,7 @@ General Public License for more details.
 using namespace std;
 using namespace VSTGUI;
 
-enum { SGRAM_MENU_ID = 1000, SIZE_MENU_ID = 1010, SKIN_MENU_ID = 1020 };
+enum { SGRAM_MENU_ID = 1000, SIZE_MENU_ID = 1010, SKIN_MENU_ID = 1020, STYLE_MENU_ID = 1030 };
 
 //-------------------------------------------------------------------------------------------------
 Array<const char*, 7> g_sgram_menu_strings = {"Input L+R",
@@ -133,7 +133,6 @@ Gui::Gui(AudioEffect* effect)
   // DtBlkFix: original images & size until setView() is called
   _images.splash_bg = Images::g_splash_bg;
   _images.glob_bg = Images::g_glob_bg;
-  _images.glob_lbl = Images::g_glob_bg; // stretched when drawn
   _images.fx_bg = Images::g_fx_bg;
   for (int i = 0; i < 2; i++) {
     _images.slider_bg[i] = DtPopupHSlider::Images::g_bg[i];
@@ -141,6 +140,7 @@ Gui::Gui(AudioEffect* effect)
   }
   _scale = 1.0f;
   _skin_idx = 0;
+  _style = GUI_STYLE_ORIGINAL;
   _view_listener = NULL;
   _relayout_requested = false;
 
@@ -166,15 +166,39 @@ Gui::Gui(AudioEffect* effect)
 
 //-------------------------------------------------------------------------------------------------
 void Gui::setView(float scale, const GuiImages& images, const std::vector<std::string>& skin_names,
-                  int skin_idx, const std::vector<int>& scales_pct, GuiViewListener* listener)
-// DtBlkFix: UI scale & skin, call while closed
+                  int skin_idx, int style, const std::vector<int>& scales_pct,
+                  GuiViewListener* listener)
+// DtBlkFix: UI scale, skin & style, call while closed
 {
   _scale = scale;
   _images = images;
   _skin_names = skin_names;
   _skin_idx = skin_idx;
+  _style = style == GUI_STYLE_BOXES ? GUI_STYLE_BOXES : GUI_STYLE_ORIGINAL;
   _scales_pct = scales_pct;
   _view_listener = listener;
+}
+
+//-------------------------------------------------------------------------------------------------
+void Gui::makePalette()
+// DtBlkFix: light or dark text & boxes, from the brightness of the global controls' background
+{
+  unsigned long c = PtrRGBA(_images.glob_bg->data())._get(); // bottom left, plain background
+  _palette.dark = ((c >> 16) & 0xff) * 3 + ((c >> 8) & 0xff) * 6 + (c & 0xff) < 1280;
+  if (_palette.dark) {
+    _palette.label = CColorRGB(150, 146, 190);
+    _palette.value = CColorRGB(238, 238, 245);
+    _palette.hover = CColorRGB(255, 128, 128);
+    _palette.box = CColorRGB(20, 23, 32);
+    _palette.box_line = CColorRGB(74, 80, 104);
+  }
+  else {
+    _palette.label = CColorRGB(112, 112, 124);
+    _palette.value = CColorRGB(22, 22, 28);
+    _palette.hover = CColorRGB(200, 40, 60);
+    _palette.box = CColorRGB(252, 252, 254);
+    _palette.box_line = CColorRGB(186, 188, 202);
+  }
 }
 
 //-------------------------------------------------------------------------------------------------
@@ -246,6 +270,13 @@ bool /*success*/ Gui::openSgram(int i, CPoint* p)
         _skin_menu[i]->addEntry(_skin_names[j].c_str(), j);
       _skin_menu[i]->setCurrent(_skin_idx);
       _sgram_menu[i]->addEntry(_skin_menu[i], "Skin");
+
+      _style_menu[i].setNew(new COptionMenu(CRect(0, 0, 0, 0), this, STYLE_MENU_ID));
+      _style_menu[i]->setStyle(kCheckStyle);
+      _style_menu[i]->addEntry("Original", GUI_STYLE_ORIGINAL);
+      _style_menu[i]->addEntry("Boxes (easier to read)", GUI_STYLE_BOXES);
+      _style_menu[i]->setCurrent(_style);
+      _sgram_menu[i]->addEntry(_style_menu[i], "Style");
     }
 
     _sgram_menu[i]->setValue(i ? 3 : 0);
@@ -314,8 +345,9 @@ bool Gui::open(void* system_window)
 
   _ok = false;
 
-  // DtBlkFix: rows shown & size
+  // DtBlkFix: rows shown & size, colours for the skin
   layoutRows();
+  makePalette();
   _relayout_requested = false;
 
   CRect frame_rect(0, 0, rect.right, rect.bottom);
@@ -633,16 +665,19 @@ void Gui::valueChanged(CControl* ctrl)
   if (!_ok)
     return;
 
-  // DtBlkFix: UI size & skin, the listener reopens us
-  if (_view_listener && (ctrl->getTag() == SIZE_MENU_ID || ctrl->getTag() == SKIN_MENU_ID)) {
+  // DtBlkFix: UI size, skin & style, the listener reopens us
+  if (_view_listener && (ctrl->getTag() == SIZE_MENU_ID || ctrl->getTag() == SKIN_MENU_ID ||
+                         ctrl->getTag() == STYLE_MENU_ID)) {
     int sel = (int)ctrl->getValue();
     int scale_pct = RndToInt(_scale * 100.0f);
-    int skin_idx = _skin_idx;
+    int skin_idx = _skin_idx, style = _style;
     if (ctrl->getTag() == SIZE_MENU_ID && idx_within(sel, _scales_pct))
       scale_pct = _scales_pct[sel];
     if (ctrl->getTag() == SKIN_MENU_ID && idx_within(sel, _skin_names))
       skin_idx = sel;
-    _view_listener->guiViewChange(scale_pct, skin_idx);
+    if (ctrl->getTag() == STYLE_MENU_ID && (sel == GUI_STYLE_ORIGINAL || sel == GUI_STYLE_BOXES))
+      style = sel;
+    _view_listener->guiViewChange(scale_pct, skin_idx, style);
     return;
   }
 
@@ -706,7 +741,7 @@ void Gui::requestRelayout()
 {
   _relayout_requested = true;
   if (_view_listener)
-    _view_listener->guiViewChange(RndToInt(_scale * 100.0f), _skin_idx);
+    _view_listener->guiViewChange(RndToInt(_scale * 100.0f), _skin_idx, _style);
 }
 
 //-------------------------------------------------------------------------------------------------
@@ -821,11 +856,23 @@ void FxAddRow::drawRect(CDrawContext* context, const CRect& update_rect)
                              /*alpha*/ 255,
                              /*use src alpha*/ false);
 
-  // a big "+" in the outlined text style of the rest of the editor
-  temp_bm->setFont(kNormalFont, /*sz*/ 20, kBoldFace);
-  temp_bm->setFillColor(CColorRGB(0, 0, 0));
-  temp_bm->setFontColor(_hover ? CColorRGB(0xff, 0x80, 0x80) : CColorRGB(0xff, 0xff, 0xff));
-  OutlineDrawString(temp_bm, MoveToOrigin(this), "+", kCenterText);
+  if (_gui->boxes()) {
+    // a "+" button like the value boxes
+    const GuiPalette& pal = _gui->_palette;
+    int cx = getWidth() / 2;
+    CRect r(cx - 24, 4, cx + 24, getHeight() - 4);
+    DrawBox(temp_bm, r, pal.box, _hover ? pal.hover : pal.box_line);
+    temp_bm->setFont(kNormalFont, /*sz*/ 15, kBoldFace);
+    temp_bm->setFontColor(_hover ? pal.hover : pal.value);
+    temp_bm->drawString("+", r, /*opaque*/ 0, kCenterText);
+  }
+  else {
+    // a big "+" in the outlined text style of the rest of the editor
+    temp_bm->setFont(kNormalFont, /*sz*/ 20, kBoldFace);
+    temp_bm->setFillColor(CColorRGB(0, 0, 0));
+    temp_bm->setFontColor(_hover ? CColorRGB(0xff, 0x80, 0x80) : CColorRGB(0xff, 0xff, 0xff));
+    OutlineDrawString(temp_bm, MoveToOrigin(this), "+", kCenterText);
+  }
 
   CViewDrawContext dc(this);
   temp_bm->blend(&dc, /*dst rect*/ this, /*src point*/ CPoint(0, 0), 255, /*src alpha*/ false);

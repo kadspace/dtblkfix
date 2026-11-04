@@ -98,12 +98,16 @@ jobs:
           New-Item -ItemType Directory -Force build\screenshots | Out-Null
           $dir = "build\cmake\plugin\DtBlkFix_artefacts\Release\Standalone"
           Copy-Item $exe $dir
-          foreach ($scale in "0.75", "1", "1.25", "1.5", "2") {
-            foreach ($skin in "", "Dark", "Warm") {
-              $name = if ($skin) { $skin } else { "Original" }
-              $a = @("$PWD\$dir", "$PWD\build\screenshots\dtblkfix-$name-$scale.png", "--scale", $scale)
-              if ($skin) { $a += @("--skin", "$PWD\$dir\dtblkfx\skins\$skin") }
-              & "$dir\dtblkfix_gui_snapshot.exe" @a
+          foreach ($style in "0", "1") {
+            $style_name = if ($style -eq "1") { "boxes" } else { "original" }
+            foreach ($scale in "0.75", "1", "1.25", "1.5", "2") {
+              foreach ($skin in "", "Dark", "Warm") {
+                $name = if ($skin) { $skin } else { "Original" }
+                $png = "$PWD\build\screenshots\dtblkfix-$style_name-$name-$scale.png"
+                $a = @("$PWD\$dir", $png, "--scale", $scale, "--style", $style)
+                if ($skin) { $a += @("--skin", "$PWD\$dir\dtblkfx\skins\$skin") }
+                & "$dir\dtblkfix_gui_snapshot.exe" @a
+              }
             }
           }
 

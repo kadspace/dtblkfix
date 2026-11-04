@@ -2,13 +2,13 @@
 //
 // dtblkfix_bridge_test   (needs the "dtblkfx" folder next to it, as the plugin does)
 //
-// 1. State round trip: settings, programs, renamed program, editor size & skin come back, the
-//    state is the same bytes again and renders the same audio.
-// 2. A bare DtBlkFx chunk (as the VST2 version saves) loads with the default size & skin.
-// 3. The editor opens at every size & skin, at the right size: one row per effect in use plus
-//    the "+" row.
-// 4. Clicking "+" adds a do-nothing filter after the last effect, clicking a row's "x" removes
-//    that effect and moves the ones below up.
+// 1. State round trip: settings, programs, renamed program, editor size, skin & style come back,
+//    the state is the same bytes again and renders the same audio.
+// 2. A bare DtBlkFx chunk (as the VST2 version saves) loads with the default size, skin & style.
+// 3. The editor opens at every size, skin & style, at the right size: one row per effect in use
+//    plus the "+" row.
+// 4. In both styles, clicking "+" adds a do-nothing filter after the last effect, clicking a
+//    row's "x" removes that effect and moves the ones below up.
 
 #define NOMINMAX
 #include <windows.h>
@@ -39,7 +39,7 @@ struct NoListener : public EngineListener {
   void beginEdit(int) override {}
   void endEdit(int) override {}
   void latencyChanged() override {}
-  void viewChangeRequested(int, int) override {}
+  void viewChangeRequested(int, int, int) override {}
 };
 
 // optional: switch the editor's skin every 20 buffers while rendering
@@ -74,7 +74,7 @@ static std::vector<int> usedFx(Engine& e)
 static int editorHeight(Engine& e)
 {
   int rows = (int)usedFx(e).size();
-  return 22 + 191 + 24 * (rows + (rows < 8 ? 1 : 0));
+  return 24 + 191 + 24 * (rows + (rows < 8 ? 1 : 0));
 }
 
 // a left click at view position (x, y) in the editor's window
@@ -134,6 +134,7 @@ int main()
   ViewSettings view;
   view.scale_pct = 150;
   view.skin = skins.back();
+  view.style = 1;
   std::vector<uint8_t> state = encodeState(a.getChunk(false), view);
 
   Engine b(&listener);
@@ -150,7 +151,8 @@ int main()
   for (int i = 0; names_same && i < a.numPrograms(); i++)
     names_same = a.programName(i) == b.programName(i);
   check(names_same && b.programName(5) == "renamed", "program names come back (incl. renamed)");
-  check(view_b.scale_pct == 150 && view_b.skin == view.skin, "editor size & skin come back");
+  check(view_b.scale_pct == 150 && view_b.skin == view.skin && view_b.style == 1,
+        "editor size, skin & style come back");
   check(encodeState(b.getChunk(false), view_b) == state, "saving again gives the same bytes");
   check(a.latency() == b.latency(), "same latency");
   check(render(a) == render(b), "same audio, bit for bit");
@@ -170,17 +172,18 @@ int main()
   std::vector<uint8_t> chunk = a.getChunk(false);
   ViewSettings view_c;
   check(decodeState(chunk.data(), chunk.size(), &view_c) == chunk.size() &&
-            view_c.scale_pct == 100 && view_c.skin == "Original",
-        "a bare chunk loads with 100% and Original");
+            view_c.scale_pct == 100 && view_c.skin == "Original" && view_c.style == 0,
+        "a bare chunk loads with 100%, Original skin and Original style");
 
-  // --- 3. editor at each size & skin
+  // --- 3. editor at each size, skin & style
   check(a.hasEditor(), "editor available");
+  for (int style = 0; style < 2; style++)
   for (int scale : Engine::scales()) {
     for (int skin = 0; skin < (int)skins.size(); skin++) {
       int w = 0, h = 0;
       a.editorSize(scale, w, h);
       HWND wnd = (HWND)a.createEditorWindow(w, h);
-      bool opened = a.openEditor(wnd, scale, skin);
+      bool opened = a.openEditor(wnd, scale, skin, style);
       HWND frame = GetWindow(wnd, GW_CHILD);
       RECT r = {0, 0, 0, 0};
       if (frame)
@@ -192,9 +195,10 @@ int main()
       char what[256];
       snprintf(what,
                sizeof(what),
-               "editor at %d%%, %s skin: %dx%d",
+               "editor at %d%%, %s skin, %s style: %dx%d",
                scale,
                skins[skin].c_str(),
+               style ? "boxes" : "original",
                (int)r.right,
                (int)r.bottom);
       check(opened && r.right == w && r.bottom == h &&
@@ -204,8 +208,9 @@ int main()
     }
   }
 
-  // --- 4. "+" and "x"
-  {
+  // --- 4. "+" and "x", in both styles
+  for (int style = 0; style < 2; style++) {
+    printf("   %s style\n", style ? "boxes" : "original");
     Engine e(&listener);
     e.setProgram(33); // Vocode
     std::vector<int> before = usedFx(e);
@@ -216,12 +221,12 @@ int main()
     int w = 0, h = 0;
     e.editorSize(100, w, h);
     HWND wnd = (HWND)e.createEditorWindow(w, h);
-    e.openEditor(wnd, 100, 0);
+    e.openEditor(wnd, 100, 0, style);
     HWND frame = GetWindow(wnd, GW_CHILD);
     check(h == editorHeight(e), "editor: one row per effect in use and a + row");
 
     // "+" is the row after the effects
-    click(frame, 205, 213 + 24 * (int)before.size() + 12);
+    click(frame, 205, 215 + 24 * (int)before.size() + 12);
     std::vector<int> added = usedFx(e);
     int slot = before.back() + 1;
     check(added.size() == before.size() + 1 && added.back() == slot &&
@@ -231,14 +236,14 @@ int main()
 
     // the wrapper reopens the editor after a change
     e.closeEditor();
-    e.openEditor(wnd, 100, 0);
+    e.openEditor(wnd, 100, 0, style);
     frame = GetWindow(wnd, GW_CHILD);
     RECT r;
     GetClientRect(frame, &r);
     check(r.bottom == editorHeight(e), "the editor grows by a row");
 
     // "x" on the first row
-    click(frame, 9, 213 + 12);
+    click(frame, 9, 215 + 12);
     std::vector<int> removed = usedFx(e);
     bool moved_up = removed.size() == before.size();
     for (int i = 0; i < 5; i++)

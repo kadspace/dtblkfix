@@ -185,7 +185,7 @@ void DtBlkFixProcessor::setStateInformation(const void* data, int size)
   _engine->setChunk(data, chunk_size, false);
   setLatencySamples(_engine->latency());
 
-  // reopen the editor: size, skin and effect rows may all have changed
+  // reopen the editor: size, skin, style and effect rows may all have changed
   view = new_view;
   triggerAsyncUpdate();
   updateHostDisplay(juce::AudioProcessorListener::ChangeDetails()
@@ -220,13 +220,15 @@ void DtBlkFixProcessor::latencyChanged()
     setLatencySamples(_engine->latency());
 }
 
-void DtBlkFixProcessor::viewChangeRequested(int scale_pct, int skin_idx)
+void DtBlkFixProcessor::viewChangeRequested(int scale_pct, int skin_idx, int style)
 {
-  // called from inside the editor's own event handling (Size, Skin, + or x): reopen it afterwards
+  // called from inside the editor's own event handling (Size, Skin, Style, + or x): reopen it
+  // afterwards
   std::vector<std::string> skins = dtblkfix::Engine::skinNames();
   view.scale_pct = scale_pct;
   if (skin_idx >= 0 && skin_idx < (int)skins.size())
     view.skin = skins[skin_idx];
+  view.style = style;
   triggerAsyncUpdate();
 }
 

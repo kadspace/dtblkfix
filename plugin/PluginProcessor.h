@@ -53,7 +53,7 @@ public:
   dtblkfix::Engine& engine() { return *_engine; }
   bool engineOk() const { return _engine_ok; }
 
-  // editor size & skin, saved in the state
+  // editor size, skin & style, saved in the state
   dtblkfix::ViewSettings view;
 
   // called (on the message thread) to reopen the editor: Size or Skin picked, an effect added or
@@ -65,7 +65,7 @@ private: // EngineListener
   void beginEdit(int index) override;
   void endEdit(int index) override;
   void latencyChanged() override;
-  void viewChangeRequested(int scale_pct, int skin_idx) override;
+  void viewChangeRequested(int scale_pct, int skin_idx, int style) override;
 
   // AsyncUpdater: tell the editor about a view change
   void handleAsyncUpdate() override;

@@ -11,6 +11,7 @@ The first release of DtBlkFix: Darrell Tam's DtBlkFx with the fixes below. The e
 - **Window size.** The window scales to 75, 100, 125, 150 or 200%, with text and lines drawn at that size and the images smoothly scaled. Pick it from a spectrogram's menu. It's saved with the plugin's state.
 - **Skins.** Original, Dark and Warm, from a spectrogram's menu, saved with the plugin's state. A skin is a folder of the same images the plugin always loaded, so you can add your own in `dtblkfx\skins`.
 - **Top strip.** One line: MixBack, Power, Overlap and BlkLen, each with its value beside it. The block length reads in ms and samples, e.g. "92.9 ms · 4096".
+- **Style.** Boxes puts each value in a box, in the top strip and the effect rows, which is easier to read; Original keeps the outlined text. Pick it from a spectrogram's menu. It's saved with the plugin's state.
 - **Effect rows.** Only the effects in use get a row. **+** adds one (a Filter over the whole range at 0 dB, which changes nothing until you edit it) after the last effect, and the **×** on a row removes that effect and moves the ones below up, so the chain stays in the order shown.
 
 ### Changed

@@ -354,21 +354,22 @@ void FxCtrl::drawRect(CDrawContext* context, const CRect& update_rect)
   // freq text
   for (i = 0; i < 2; i++) {
     bool active = _freq[i]->getState() > _freq[i]->INACTIVE || _drag_both_state;
-    temp_bm->setFontColor(active ? focus_txt_col : normal_txt_col);
+    // DtBlkFix: the "x" lies over the first frequency, which isn't what the mouse is on then
+    if (i == 0 && _del_hover && !_drag_both_state)
+      active = false;
 
     if (!fft_fx->paramUsed(BlkFxParam::FX_FREQ_A + i))
-      OutlineDrawString(temp_bm, _freq[i], "-", kCenterText);
+      drawValue(temp_bm, CastCRect(_freq[i]), "-", active);
 
     else {
       float hz = BlkFxParam::getHz(freq_val[i]);
       // HzToNote(str, hz);
       str << sprnum(hz, /*min unit*/ 1.0f) << "Hz";
-      OutlineDrawString(temp_bm, _freq[i], str, kCenterText);
+      drawValue(temp_bm, CastCRect(_freq[i]), str, active);
     }
   }
 
   // amp text
-  temp_bm->setFontColor(_amp->getState() == _amp->INACTIVE ? normal_txt_col : focus_txt_col);
 
   bool mix_mode = fft_fx->ampMixMode();
   float amp_mult = BlkFxParam::getEffectAmpMult(amp_v, mix_mode);
@@ -382,23 +383,33 @@ void FxCtrl::drawRect(CDrawContext* context, const CRect& update_rect)
   else
     str << "-inf dB";
 
-  OutlineDrawString(temp_bm, /*rect*/ _amp, str, kCenterText);
+  drawValue(temp_bm, CastCRect(_amp), str, _amp->getState() != _amp->INACTIVE);
 
   // effect type text
-  temp_bm->setFontColor(_fxtype_ctrl->getState() == _fxtype_ctrl->INACTIVE ? normal_txt_col
-                                                                           : focus_txt_col);
-  OutlineDrawString(temp_bm, /*rect*/ _fxtype_ctrl, fft_fx->name(), kCenterText);
+  drawValue(temp_bm,
+            CastCRect(_fxtype_ctrl),
+            fft_fx->name(),
+            _fxtype_ctrl->getState() != _fxtype_ctrl->INACTIVE);
 
   // effect value text
-  temp_bm->setFontColor(_fxval->getState() != _fxval->INACTIVE ? focus_txt_col : normal_txt_col);
   fft_fx->dispVal(blkFx()->_fx1_0 + _fx_set, str, _fxval->getValue());
-  OutlineDrawString(temp_bm, /*rect*/ _fxval, str, kCenterText);
+  drawValue(temp_bm, CastCRect(_fxval), str, _fxval->getState() != _fxval->INACTIVE);
 
   // DtBlkFix: "x" at the left end to remove the effect while the row has the mouse
   if (_gui->editableRows() && (active_ctrl || _drag_both_state || _del_hover)) {
-    temp_bm->setFont(kNormalFont, /*sz*/ 17, kBoldFace);
-    temp_bm->setFontColor(_del_hover ? focus_txt_col : normal_txt_col);
-    OutlineDrawString(temp_bm, delRect(), "\xd7", kCenterText);
+    if (_gui->boxes()) {
+      const GuiPalette& pal = _gui->_palette;
+      CRect r(3, 9, 17, 22); // in the room boxRect() leaves
+      DrawBox(temp_bm, r, pal.box, _del_hover ? pal.hover : pal.box_line);
+      temp_bm->setFont(kNormalFont, /*sz*/ 13, kBoldFace);
+      temp_bm->setFontColor(_del_hover ? pal.hover : pal.value);
+      temp_bm->drawString("\xd7", r, /*opaque*/ 0, kCenterText);
+    }
+    else {
+      temp_bm->setFont(kNormalFont, /*sz*/ 17, kBoldFace);
+      temp_bm->setFontColor(_del_hover ? focus_txt_col : normal_txt_col);
+      OutlineDrawString(temp_bm, delRect(), "\xd7", kCenterText);
+    }
   }
 
   // copy into main drawing area
@@ -859,5 +870,35 @@ void FxCtrl::setParameter(long index, float v)
 CRect FxCtrl::delRect()
 // DtBlkFix: where the "x" is, in our coordinates (left end of the row)
 {
-  return CRect(2, 0, 16, getHeight());
+  return _gui->boxes() ? CRect(0, 0, 20, getHeight()) : CRect(2, 0, 16, getHeight());
+}
+
+//-------------------------------------------------------------------------------------------------
+CRect FxCtrl::boxRect(CRect r)
+// DtBlkFix: the box for a value in control rectangle r: under the frequency scale, and clear of
+// the "x" at the left end
+{
+  int left = (int)r.left;
+  if (_gui->editableRows() && left < 20)
+    left = 20;
+  return CRect(left + 3, 9, r.right - 3, 22);
+}
+
+//-------------------------------------------------------------------------------------------------
+void FxCtrl::drawValue(CContextRGBA* temp_bm, CRect r, const char* str, bool active)
+{
+  if (_gui->boxes()) {
+    const GuiPalette& pal = _gui->_palette;
+    r = boxRect(r);
+    DrawBox(temp_bm, r, pal.box, active ? pal.hover : pal.box_line);
+    temp_bm->setFont(kNormalFont, /*sz*/ 11, kBoldFace);
+    temp_bm->setFontColor(active ? pal.hover : pal.value);
+    temp_bm->drawString(str, r, /*opaque*/ 0, kCenterText);
+    return;
+  }
+  // as the original: white outline, black inside, the outline pink when active
+  temp_bm->setFont(kNormalFont, /*sz*/ 0, kBoldFace);
+  temp_bm->setFillColor(CColorRGB(0, 0, 0));
+  temp_bm->setFontColor(active ? CColorRGB(0xff, 0x80, 0x80) : CColorRGB(0xff, 0xff, 0xff));
+  OutlineDrawString(temp_bm, r, str, kCenterText);
 }

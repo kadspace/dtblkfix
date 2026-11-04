@@ -174,6 +174,28 @@ CCoord StringWidth(CDrawContext* context, const char* str)
 }
 
 //-------------------------------------------------------------------------------------------------
+void DrawBox(CDrawContext* context, CRect r, const CColor& fill, const CColor& line, int radius)
+{
+#ifdef _WIN32
+  HDC dc = (HDC)context->getSystemContext();
+  r.offset(context->offset.h, context->offset.v);
+  HBRUSH brush = CreateSolidBrush(RGB(fill.red, fill.green, fill.blue));
+  HPEN pen = CreatePen(PS_SOLID, /*width: one pixel whatever the scale*/ 0,
+                       RGB(line.red, line.green, line.blue));
+  HGDIOBJ old_brush = SelectObject(dc, brush), old_pen = SelectObject(dc, pen);
+  RoundRect(dc, r.left, r.top, r.right, r.bottom, radius * 2, radius * 2);
+  SelectObject(dc, old_brush);
+  SelectObject(dc, old_pen);
+  DeleteObject(brush);
+  DeleteObject(pen);
+#else
+  context->setFillColor(fill);
+  context->setFrameColor(line);
+  context->drawRect(r, kDrawFilledAndStroked);
+#endif
+}
+
+//-------------------------------------------------------------------------------------------------
 void OffsetDrawContext(CDrawContext* dc, CView* view)
 // set the drawing context offset to match the given view
 {

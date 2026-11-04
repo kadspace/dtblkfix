@@ -51,22 +51,27 @@ GUI_GLOBAL_EXTERN VstGuiRef<CContextRGBA>
     g_fx_bg;
 };
 
-// DtBlkFix: the global controls are one line, with their labels this size beside the values
-static const float GLOB_LABEL_SCALE = 15.0f / 21.0f;
-
 // DtBlkFix: the images that a Gui draws with (a skin, at the UI scale)
 struct GuiImages {
   VstGuiRef<CContextRGBA> splash_bg, glob_bg, fx_bg;
-  // the global controls image again, at GLOB_LABEL_SCALE of the UI scale, for its labels
-  VstGuiRef<CContextRGBA> glob_lbl;
   Array<VstGuiRef<CContextRGBA>, 2> slider_bg, slider_knob; // index COARSE or FINE
 };
 
-// DtBlkFix: the UI size or skin was picked from a spectrogram menu, or the effect rows changed;
-// the editor should be reopened (afterwards, not from inside this call)
+// DtBlkFix: how the values are drawn: as in the original (outlined text over the images), or in
+// boxes (easier to read)
+enum { GUI_STYLE_ORIGINAL = 0, GUI_STYLE_BOXES = 1 };
+
+// DtBlkFix: text & box colours, light or dark to suit the skin
+struct GuiPalette {
+  bool dark;
+  CColor label, value, hover, box, box_line;
+};
+
+// DtBlkFix: the UI size, skin or style was picked from a spectrogram menu, or the effect rows
+// changed; the editor should be reopened (afterwards, not from inside this call)
 class GuiViewListener {
 public:
-  virtual void guiViewChange(int scale_pct, int skin_idx) = 0;
+  virtual void guiViewChange(int scale_pct, int skin_idx, int style) = 0;
 };
 
 class Gui;
@@ -155,7 +160,8 @@ public: // DtBlkFix: UI scale and skin
   // set before open(): scale (1.0 = original size), images loaded for that scale, the skin names
   // & scales to offer in the spectrogram menus and who to tell when one is picked
   void setView(float scale, const GuiImages& images, const std::vector<std::string>& skin_names,
-               int skin_idx, const std::vector<int>& scales_pct, GuiViewListener* listener);
+               int skin_idx, int style, const std::vector<int>& scales_pct,
+               GuiViewListener* listener);
 
   // override VSTGUIEditorInterface: frame & offscreen bitmaps are scaled by this
   virtual float getScale() const { return _scale; }
@@ -168,11 +174,18 @@ public: // DtBlkFix: UI scale and skin
   float _scale;
   std::vector<std::string> _skin_names;
   int _skin_idx;
+  int _style;
   std::vector<int> _scales_pct;
   GuiViewListener* _view_listener;
+  GuiPalette _palette;
 
-  // Size & Skin submenus of the spectrogram menus
-  Array<VstGuiRef<COptionMenu>, 2> _size_menu, _skin_menu;
+  bool boxes() const { return _style == GUI_STYLE_BOXES; }
+
+  // pick the palette for the skin (from its background)
+  void makePalette();
+
+  // Size, Skin & Style submenus of the spectrogram menus
+  Array<VstGuiRef<COptionMenu>, 2> _size_menu, _skin_menu, _style_menu;
 
 public: // DtBlkFix: only the effects in use get a row, with "+" to add one and "x" to remove one
   // (only with a view listener; otherwise all 8 rows, as in the original)
@@ -192,7 +205,7 @@ public: // DtBlkFix: only the effects in use get a row, with "+" to add one and 
   virtual bool getRect(ERect** rect);
 
   // height of the global controls: one line, labels beside the values
-  int globHeight() { return 22; }
+  int globHeight() { return 24; }
 
   // effect slots shown, in order
   std::vector<int> _rows;
