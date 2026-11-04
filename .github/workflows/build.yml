@@ -90,6 +90,73 @@ jobs:
           & $iscc /DVersion=$env:VERSION "/DSource=$PWD\build\package\DtBlkFix-$env:VERSION-win64" "/DOutDir=$PWD\build\package" packaging\DtBlkFix.iss
           if ($LASTEXITCODE -ne 0) { throw "iscc failed" }
 
+      - name: Drag the corner to resize (standalone app)
+        continue-on-error: true
+        shell: pwsh
+        run: |
+          Add-Type -AssemblyName System.Drawing
+          Add-Type @"
+          using System;
+          using System.Runtime.InteropServices;
+          public static class W {
+            [DllImport("user32.dll")] public static extern bool SetProcessDPIAware();
+            [DllImport("user32.dll")] public static extern bool GetClientRect(IntPtr h, out RECT r);
+            [DllImport("user32.dll")] public static extern bool GetWindowRect(IntPtr h, out RECT r);
+            [DllImport("user32.dll")] public static extern bool ClientToScreen(IntPtr h, ref POINT p);
+            [DllImport("user32.dll")] public static extern bool SetCursorPos(int x, int y);
+            [DllImport("user32.dll")] public static extern void mouse_event(uint f, uint dx, uint dy, uint d, IntPtr e);
+            [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr h);
+            public struct RECT { public int L, T, R, B; }
+            public struct POINT { public int X, Y; }
+          }
+          "@
+          [W]::SetProcessDPIAware() | Out-Null
+          New-Item -ItemType Directory -Force build\screenshots | Out-Null
+          function Shot($h, $name) {
+            $r = New-Object W+RECT
+            [W]::GetWindowRect($h, [ref]$r) | Out-Null
+            $bmp = New-Object System.Drawing.Bitmap ($r.R - $r.L), ($r.B - $r.T)
+            $g = [System.Drawing.Graphics]::FromImage($bmp)
+            $g.CopyFromScreen($r.L, $r.T, 0, 0, $bmp.Size)
+            $bmp.Save("$PWD\build\screenshots\$name.png")
+            $g.Dispose(); $bmp.Dispose()
+          }
+          function Client($h) {
+            $r = New-Object W+RECT
+            [W]::GetClientRect($h, [ref]$r) | Out-Null
+            return $r
+          }
+          $exe = "build\cmake\plugin\DtBlkFix_artefacts\Release\Standalone\DtBlkFix.exe"
+          $p = Start-Process $exe -PassThru
+          Start-Sleep -Seconds 8
+          $p.Refresh()
+          $h = $p.MainWindowHandle
+          if ($h -eq [IntPtr]::Zero) { throw "no window" }
+          [W]::SetForegroundWindow($h) | Out-Null
+          Start-Sleep -Milliseconds 500
+          $before = Client $h
+          Shot $h "drag-before"
+          # the bottom right corner of the window's client area, where the grip is
+          $pt = New-Object W+POINT
+          $pt.X = $before.R - 5; $pt.Y = $before.B - 5
+          [W]::ClientToScreen($h, [ref]$pt) | Out-Null
+          [W]::SetCursorPos($pt.X, $pt.Y) | Out-Null
+          Start-Sleep -Milliseconds 300
+          [W]::mouse_event(2, 0, 0, 0, [IntPtr]::Zero)  # left button down
+          for ($i = 1; $i -le 20; $i++) {
+            [W]::SetCursorPos($pt.X + 8 * $i, $pt.Y + 6 * $i) | Out-Null
+            Start-Sleep -Milliseconds 40
+          }
+          [W]::mouse_event(4, 0, 0, 0, [IntPtr]::Zero)  # left button up
+          Start-Sleep -Seconds 2
+          $after = Client $h
+          Shot $h "drag-after"
+          $p.CloseMainWindow() | Out-Null
+          Start-Sleep -Seconds 2
+          if (-not $p.HasExited) { $p.Kill() }
+          "client area before: $($before.R) x $($before.B), after the drag: $($after.R) x $($after.B)"
+          if ($after.R -le $before.R) { throw "the window didn't get bigger" }
+
       - name: Screenshots of the editor
         continue-on-error: true
         shell: pwsh
