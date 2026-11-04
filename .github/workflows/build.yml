@@ -80,16 +80,6 @@ jobs:
           ./packaging/package.ps1 -Build build/cmake -Juce build/JUCE -Out build/package
           -Version $env:VERSION
 
-      - name: Installer
-        shell: pwsh
-        run: |
-          $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
-          if (-not (Test-Path $iscc)) {
-            choco install innosetup -y --no-progress
-          }
-          & $iscc /DVersion=$env:VERSION "/DSource=$PWD\build\package\DtBlkFix-$env:VERSION-win64" "/DOutDir=$PWD\build\package" packaging\DtBlkFix.iss
-          if ($LASTEXITCODE -ne 0) { throw "iscc failed" }
-
       - name: Drag the corner to resize (standalone app)
         continue-on-error: true
         shell: pwsh
@@ -178,15 +168,11 @@ jobs:
             }
           }
 
+      # the bundle itself (the download unzips to DtBlkFix.vst3, ready to copy)
       - uses: actions/upload-artifact@v4
         with:
-          name: DtBlkFix-${{ env.VERSION }}-win64
-          path: build/package/DtBlkFix-${{ env.VERSION }}-win64.zip
-
-      - uses: actions/upload-artifact@v4
-        with:
-          name: DtBlkFix-${{ env.VERSION }}-setup
-          path: build/package/DtBlkFix-${{ env.VERSION }}-setup.exe
+          name: DtBlkFix-${{ env.VERSION }}-vst3
+          path: build/package/vst3
 
       - uses: actions/upload-artifact@v4
         if: always()

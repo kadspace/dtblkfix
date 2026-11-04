@@ -7,13 +7,13 @@ DtBlkFx is Darrell Tam's FFT effect from 2005–2006: up to eight spectral effec
 ## Fixed
 
 - **Timing.** DtBlkFx delayed its output by one block but told the host its latency was zero, so at the default settings everything came out a beat late. DtBlkFix always delays by exactly one block and reports it, so the host compensates for it, and the Delay control is gone.
-- **Song sync.** DtBlkFx checked the song position about once a beat, and only with Sync on, so after a loop, a jump or a tempo change the blocks drifted off the beat, and where they landed depended on the host's buffer size. In DtBlkFix, Sync is always on, so its control is gone, and blocks follow the song position on every buffer: a block starts on every beat, right after a loop or jump, at any buffer size. With no song position, as in the standalone app, there's no beat to follow.
+- **Song sync.** DtBlkFx checked the song position about once a beat, and only with Sync on, so after a loop, a jump or a tempo change the blocks drifted off the beat, and where they landed depended on the host's buffer size. In DtBlkFix, Sync is always on, so its control is gone, and blocks follow the song position on every buffer: a block starts on every beat, right after a loop or jump, at any buffer size. With no song position, there's no beat to follow.
 - **Window size.** The original is a fixed 410 by 409 pixel window, which is tiny on a modern screen. In DtBlkFix you drag its bottom right corner to any size from 75 to 300%, or pick 75, 100, 125, 150 or 200% from a menu. Text and lines are drawn at the new size, so it stays sharp.
 - **Skins.** The original look, plus Dark and Warm. A skin is just the folder of images the plugin already loads, so you can make your own.
 - **Easier to read.** Style **Boxes** puts each value in a box, in the top strip and the effect rows. **Original** keeps DtBlkFx's outlined text.
 - **Presets and settings at the top.** A bar across the top of the editor shows the preset: ◀ and ▶ step through the presets, and clicking its name lists them all. **Settings** next to it has Size, Skin (Original, Dark, Warm) and Style.
 - **Effect rows.** The original always showed eight effect rows, most of them empty. DtBlkFix shows only the effects in use. **+** below them adds one, and the **×** at the left end of a row removes it.
-- **Formats.** DtBlkFix is a 64-bit VST3 and a standalone app, with a Windows installer.
+- **Format.** DtBlkFix is a 64-bit VST3.
 
 Apart from Sync, the audio is bit-identical to the original. That's the whole list. There are no new effects. The only new controls are the preset bar, + and ×, and Size, Skin and Style; Delay and Sync are gone, and BlkLen shows the block length in ms and samples.
 
@@ -21,9 +21,7 @@ Apart from Sync, the audio is bit-identical to the original. That's the whole li
 
 Windows 10 or later, 64-bit.
 
-Run `DtBlkFix-1.0.0-setup.exe`. It puts the VST3 in `C:\Program Files\Common Files\VST3` and the standalone app in `C:\Program Files\DtBlkFix`.
-
-Or use the zip: copy `DtBlkFix.vst3` to `C:\Program Files\Common Files\VST3`. Everything the plugin needs is inside it. The standalone app is in `Standalone`; keep `DtBlkFix.exe` next to its `dtblkfx` folder.
+Unzip `DtBlkFix-1.0.0-vst3.zip` and copy the `DtBlkFix.vst3` folder into your VST3 folder, usually `C:\Program Files\Common Files\VST3`. Then rescan plugins in your DAW. Everything the plugin needs is inside `DtBlkFix.vst3`, its licenses included.
 
 DtBlkFix has its own plugin ID, so it installs next to the original DtBlkFx and doesn't replace it. It has the same presets and saves its settings in the same format.
 
@@ -47,7 +45,7 @@ cmake --build build --config Release
 ctest --test-dir build -C Release
 ```
 
-The VST3 and the standalone app end up in `build/plugin/DtBlkFix_artefacts/Release`. The comparison against the original engine runs when `DTBLKFIX_REFERENCE_DIR` points to a checkout of it; [`.github/workflows/build.yml`](.github/workflows/build.yml) shows how CI does it, packaging included.
+The VST3 ends up in `build/plugin/DtBlkFix_artefacts/Release/VST3` (CMake also builds a standalone app, which CI uses for a resize test). The comparison against the original engine runs when `DTBLKFIX_REFERENCE_DIR` points to a checkout of it; [`.github/workflows/build.yml`](.github/workflows/build.yml) shows how CI does it, packaging included.
 
 The plugin doesn't need the Steinberg VST2 SDK: `shim/` stands in for the few parts of it that the engine uses. If you have the SDK, `projects/DTBlkFx.sln` still builds the VST2: copy its `pluginterfaces/` and `public.sdk/` folders into `vstsdk/`, then open the solution or run `build_fork.bat`.
 
