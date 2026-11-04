@@ -196,6 +196,47 @@ void DrawBox(CDrawContext* context, CRect r, const CColor& fill, const CColor& l
 }
 
 //-------------------------------------------------------------------------------------------------
+void DrawArrow(CDrawContext* context, float x, float y, float size, int dir, const CColor& col)
+{
+#ifdef _WIN32
+  // in hundredths of a view unit under a scaled world transform, so it's placed to a fraction
+  // of a pixel at any scale
+  HDC dc = (HDC)context->getSystemContext();
+  XFORM old_xf;
+  bool advanced = GetGraphicsMode(dc) == GM_ADVANCED && GetWorldTransform(dc, &old_xf);
+  float k = 0.01f;
+  if (advanced) {
+    XFORM f = {k, 0, 0, k, 0, 0};
+    ModifyWorldTransform(dc, &f, MWT_LEFTMULTIPLY);
+  }
+  else
+    k = 1.0f;
+  float ox = (x + (float)context->offset.h) / k, oy = (y + (float)context->offset.v) / k;
+  float h = size * 0.5f / k;
+  POINT pts[3];
+  if (dir == 0) { // down
+    pts[0].x = (LONG)(ox - h); pts[0].y = (LONG)(oy - h * 0.6f);
+    pts[1].x = (LONG)(ox + h); pts[1].y = (LONG)(oy - h * 0.6f);
+    pts[2].x = (LONG)ox;       pts[2].y = (LONG)(oy + h * 0.6f);
+  }
+  else {
+    float d = (float)dir;
+    pts[0].x = (LONG)(ox - d * h * 0.6f); pts[0].y = (LONG)(oy - h);
+    pts[1].x = (LONG)(ox - d * h * 0.6f); pts[1].y = (LONG)(oy + h);
+    pts[2].x = (LONG)(ox + d * h * 0.6f); pts[2].y = (LONG)oy;
+  }
+  HBRUSH brush = CreateSolidBrush(RGB(col.red, col.green, col.blue));
+  HGDIOBJ old_brush = SelectObject(dc, brush), old_pen = SelectObject(dc, GetStockObject(NULL_PEN));
+  Polygon(dc, pts, 3);
+  SelectObject(dc, old_brush);
+  SelectObject(dc, old_pen);
+  DeleteObject(brush);
+  if (advanced)
+    SetWorldTransform(dc, &old_xf);
+#endif
+}
+
+//-------------------------------------------------------------------------------------------------
 void OffsetDrawContext(CDrawContext* dc, CView* view)
 // set the drawing context offset to match the given view
 {

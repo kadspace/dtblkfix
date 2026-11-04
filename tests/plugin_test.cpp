@@ -94,7 +94,7 @@ int main()
           rows++;
           break;
         }
-    int view_h = 24 + 191 + 24 * (rows + (rows < 8 ? 1 : 0));
+    int view_h = 22 + 24 + 191 + 24 * (rows + (rows < 8 ? 1 : 0));
     check(editor != nullptr && w == 615 && h == (int)(view_h * 1.5f + 0.5f),
           "editor created for 615x" + juce::String(h) + " pixels (" + juce::String(rows) +
               " effects)");

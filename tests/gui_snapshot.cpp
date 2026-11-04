@@ -17,9 +17,16 @@ extern void* hInstance;
 bool DtBlkFixGlobalInit();
 bool DtBlkFixLoadImages(const char* skin_dir, float scale, GuiImages* dst, ostream* err);
 
-// show the Size & Skin menus as the plugin does
+// show the header & the Settings menu as the plugin does, and load a preset picked there
 struct NoViewChange : public GuiViewListener {
+  DtBlkFx* fx;
+  NoViewChange() : fx(NULL) {}
   virtual void guiViewChange(int, int, int) {}
+  virtual void guiProgramChange(int program)
+  {
+    if (fx)
+      fx->setProgram(program);
+  }
 };
 
 static bool WritePng(const char* file, int w, int h, const std::vector<unsigned char>& rgb)
@@ -110,6 +117,7 @@ int main(int argc, char** argv)
   fx->setProgram(preset);
 
   NoViewChange listener;
+  listener.fx = fx;
   GuiImages images = gui->_images;
   std::string skin_dir = std::string(argv[1]) + "\\dtblkfx";
   if (skin)

@@ -202,6 +202,48 @@ void Gui::makePalette()
 }
 
 //-------------------------------------------------------------------------------------------------
+void Gui::addViewMenus(COptionMenu* menu)
+// DtBlkFix: Size, Skin & Style submenus, picked in valueChanged()
+{
+  CharArray<32> str;
+  _size_menu.setNew(new COptionMenu(CRect(0, 0, 0, 0), this, SIZE_MENU_ID));
+  _size_menu->setStyle(kCheckStyle);
+  int curr_scale = -1; // a size dragged to isn't in the menu
+  for (int j = 0; j < (int)_scales_pct.size(); j++) {
+    str << _scales_pct[j] << "%";
+    _size_menu->addEntry(str, j);
+    if (_scales_pct[j] == RndToInt(_scale * 100.0f))
+      curr_scale = j;
+  }
+  _size_menu->setCurrent(curr_scale);
+  menu->addEntry(_size_menu, "Size");
+
+  _skin_menu.setNew(new COptionMenu(CRect(0, 0, 0, 0), this, SKIN_MENU_ID));
+  _skin_menu->setStyle(kCheckStyle);
+  for (int j = 0; j < (int)_skin_names.size(); j++)
+    _skin_menu->addEntry(_skin_names[j].c_str(), j);
+  _skin_menu->setCurrent(_skin_idx);
+  menu->addEntry(_skin_menu, "Skin");
+
+  _style_menu.setNew(new COptionMenu(CRect(0, 0, 0, 0), this, STYLE_MENU_ID));
+  _style_menu->setStyle(kCheckStyle);
+  _style_menu->addEntry("Original", GUI_STYLE_ORIGINAL);
+  _style_menu->addEntry("Boxes (easier to read)", GUI_STYLE_BOXES);
+  _style_menu->setCurrent(_style);
+  menu->addEntry(_style_menu, "Style");
+}
+
+//-------------------------------------------------------------------------------------------------
+void Gui::selectProgram(int program)
+// DtBlkFix: the listener loads it and tells the host (and reopens us: the rows may change)
+{
+  if (_view_listener && program >= 0 && program < blkFx()->getNumPrograms())
+    _view_listener->guiProgramChange(program);
+  if (_header)
+    _header->setDirty();
+}
+
+//-------------------------------------------------------------------------------------------------
 Gui::~Gui()
 {
   LOGG("", "Gui::~Gui" << VAR(this));
@@ -246,38 +288,6 @@ bool /*success*/ Gui::openSgram(int i, CPoint* p)
 
     for (int j = 0; j < g_sgram_menu_strings.size(); j++)
       _sgram_menu[i]->addEntry(g_sgram_menu_strings[j], j);
-
-    // DtBlkFix: UI size & skin
-    if (_view_listener) {
-      CharArray<32> str;
-      _sgram_menu[i]->addEntry("-");
-
-      _size_menu[i].setNew(new COptionMenu(CRect(0, 0, 0, 0), this, SIZE_MENU_ID));
-      _size_menu[i]->setStyle(kCheckStyle);
-      int curr_scale = 0;
-      for (int j = 0; j < (int)_scales_pct.size(); j++) {
-        str << _scales_pct[j] << "%";
-        _size_menu[i]->addEntry(str, j);
-        if (_scales_pct[j] == RndToInt(_scale * 100.0f))
-          curr_scale = j;
-      }
-      _size_menu[i]->setCurrent(curr_scale);
-      _sgram_menu[i]->addEntry(_size_menu[i], "Size");
-
-      _skin_menu[i].setNew(new COptionMenu(CRect(0, 0, 0, 0), this, SKIN_MENU_ID));
-      _skin_menu[i]->setStyle(kCheckStyle);
-      for (int j = 0; j < (int)_skin_names.size(); j++)
-        _skin_menu[i]->addEntry(_skin_names[j].c_str(), j);
-      _skin_menu[i]->setCurrent(_skin_idx);
-      _sgram_menu[i]->addEntry(_skin_menu[i], "Skin");
-
-      _style_menu[i].setNew(new COptionMenu(CRect(0, 0, 0, 0), this, STYLE_MENU_ID));
-      _style_menu[i]->setStyle(kCheckStyle);
-      _style_menu[i]->addEntry("Original", GUI_STYLE_ORIGINAL);
-      _style_menu[i]->addEntry("Boxes (easier to read)", GUI_STYLE_BOXES);
-      _style_menu[i]->setCurrent(_style);
-      _sgram_menu[i]->addEntry(_style_menu[i], "Style");
-    }
 
     _sgram_menu[i]->setValue(i ? 3 : 0);
     _sgram[i]->setName(g_sgram_menu_strings[i ? 3 : 0]);
@@ -386,6 +396,13 @@ bool Gui::open(void* system_window)
 
   // position of each control
   CPoint p(0, 0);
+
+  // DtBlkFix: the header (preset & settings)
+  if (headHeight() > 0) {
+    NewView(_header, frame);
+    _header->init(this, CRect(p.x, p.y, p.x + _images.glob_bg->getWidth(), p.y + headHeight()));
+    p.y += headHeight();
+  }
 
   // place global controls
   NewView(_glob_ctrl, frame);
@@ -723,7 +740,7 @@ void Gui::layoutRows()
     n_rows++; // "+" row
 
   rect.right = (VstInt16)_images.glob_bg->getWidth();
-  rect.bottom = (VstInt16)(globHeight() + _images.splash_bg->getHeight() +
+  rect.bottom = (VstInt16)(headHeight() + globHeight() + _images.splash_bg->getHeight() +
                            _images.fx_bg->getHeight() / 5 * n_rows);
 }
 
@@ -900,4 +917,201 @@ CMouseEventResult FxAddRow::onMouseExited(CPoint& mouse, const long& buttons)
   _hover = false;
   setDirty();
   return kMouseEventHandled;
+}
+
+//*************************************************************************************************
+// DtBlkFix: the header
+//*************************************************************************************************
+
+// where things are in the header (view units, the header is 410 x 22)
+static const CRect g_head_prev(4, 3, 22, 19), g_head_name(25, 3, 201, 19), g_head_next(204, 3, 222, 19);
+static const int HEAD_SETTINGS_W = 78; // the Settings box, at the right
+
+//-------------------------------------------------------------------------------------------------
+HeaderButton::HeaderButton(HeaderCtrl* header, int step)
+    : CView(CRect(0, 0, 0, 0))
+{
+  _header = header;
+  _step = step;
+  _hover = false;
+}
+
+void HeaderButton::setSize(CastCRect r)
+{
+  /*CView::*/ size = r;
+  /*CView::*/ mouseableArea = r;
+}
+
+CMouseEventResult HeaderButton::onMouseDown(CPoint& mouse, const long& buttons)
+{
+  if (buttons & kLButton)
+    _header->step(_step);
+  return kMouseEventHandled;
+}
+
+CMouseEventResult HeaderButton::onMouseEntered(CPoint& mouse, const long& buttons)
+{
+  _hover = true;
+  setDirty();
+  return kMouseEventHandled;
+}
+
+CMouseEventResult HeaderButton::onMouseExited(CPoint& mouse, const long& buttons)
+{
+  _hover = false;
+  setDirty();
+  return kMouseEventHandled;
+}
+
+//-------------------------------------------------------------------------------------------------
+HeaderCtrl::HeaderCtrl()
+    : CViewContainer(CRect(), /*frame*/ NULL, /*background*/ NULL)
+{
+  _num_presets = 0;
+  _reset_entry = -1;
+}
+
+//-------------------------------------------------------------------------------------------------
+bool HeaderCtrl::divider(int program)
+// the factory presets have "--------" programs between groups
+{
+  char name[256] = {0};
+  _gui->blkFx()->getProgramNameIndexed(0, program, name);
+  if (!name[0])
+    return false;
+  for (const char* c = name; *c; c++)
+    if (*c != '-')
+      return false;
+  return true;
+}
+
+//-------------------------------------------------------------------------------------------------
+void HeaderCtrl::init(Gui* gui, CastCRect rect)
+{
+  /*CView::*/ size = rect;
+  /*CView::*/ mouseableArea = rect;
+  _gui = gui;
+  CRect r = MoveToOrigin(rect);
+
+  _prev.setNew(new HeaderButton(this, -1));
+  _prev->setSize(g_head_prev);
+  AddView(_prev, this);
+  _next.setNew(new HeaderButton(this, +1));
+  _next->setSize(g_head_next);
+  AddView(_next, this);
+
+  // the presets, then (after a separator) the last program, which resets the current one
+  DtBlkFx* fx = _gui->blkFx();
+  int n = (int)fx->getNumPrograms();
+  _num_presets = std::max(n - 1, 1);
+  _preset_menu.New();
+  _preset_menu->setSize(g_head_name);
+  _preset_menu->setListener(this);
+  // (one entry per program, so an entry's index is its program; dividers are separators)
+  for (int i = 0; i < _num_presets; i++) {
+    char name[256] = {0};
+    fx->getProgramNameIndexed(0, i, name);
+    _preset_menu->addEntry(divider(i) ? "-" : name, i);
+  }
+  if (n > _num_presets) {
+    if (!divider(_num_presets - 1))
+      _preset_menu->addEntry("-");
+    _reset_entry = (int)_preset_menu->getNbEntries();
+    _preset_menu->addEntry("Reset this preset");
+  }
+  _preset_menu->setCurrent(fx->getProgram());
+  AddView(_preset_menu, this);
+
+  _settings_menu.New();
+  _settings_menu->setSize(CRect(r.right - 4 - HEAD_SETTINGS_W, 3, r.right - 4, 19));
+  _settings_menu->setListener(this);
+  _settings_menu->setStyle(0); // no check marks
+  _gui->addViewMenus(_settings_menu);
+  AddView(_settings_menu, this);
+}
+
+//-------------------------------------------------------------------------------------------------
+void HeaderCtrl::step(int dir)
+{
+  int p = _gui->blkFx()->getProgram();
+  if (p < 0 || p >= _num_presets)
+    p = 0;
+  for (int i = 0; i < _num_presets; i++) {
+    p = (p + dir + _num_presets) % _num_presets;
+    if (!divider(p))
+      break;
+  }
+  _gui->selectProgram(p);
+}
+
+//-------------------------------------------------------------------------------------------------
+void HeaderCtrl::valueChanged(CControl* ctrl)
+{
+  if (ctrl != _preset_menu)
+    return; // the Settings submenus go to the Gui
+  int sel = (int)ctrl->getValue();
+  if (sel >= 0 && sel < _num_presets && !divider(sel))
+    _gui->selectProgram(sel);
+  else if (sel == _reset_entry) // reset the current program
+    _gui->selectProgram(_num_presets);
+}
+
+//-------------------------------------------------------------------------------------------------
+void HeaderCtrl::draw(CDrawContext* context)
+{
+  drawRect(context, size);
+}
+
+//-------------------------------------------------------------------------------------------------
+void HeaderCtrl::drawRect(CDrawContext* context, const CRect& update_rect_)
+{
+  CRect update_rect = Bound(update_rect_, this);
+  setDirty(false);
+  CContextRGBA* temp_bm = &_gui->_temp_bm;
+  CRect rel_update_rect = Offset(-TopLeft(this), update_rect);
+  temp_bm->setClipRect(rel_update_rect);
+  const GuiPalette& pal = _gui->_palette;
+
+  // the global controls' plain background
+  CContextRGBA* bg = _gui->_images.glob_bg;
+  int w = getWidth(), h = getHeight();
+  for (int y = 0; y < h; y += 5)
+    bg->blend(temp_bm, CRect(0, y, w, std::min(y + 5, h)), CPoint(0, 21), 255, false);
+
+  // previous & next
+  for (int i = 0; i < 2; i++) {
+    HeaderButton* b = i ? _next : _prev;
+    CRect r = i ? g_head_next : g_head_prev;
+    DrawBox(temp_bm, r, pal.box, b->_hover ? pal.hover : pal.box_line);
+    DrawArrow(temp_bm,
+              (float)(r.left + r.right) * 0.5f,
+              (float)(r.top + r.bottom) * 0.5f,
+              7.0f,
+              i ? +1 : -1,
+              b->_hover ? pal.hover : pal.value);
+  }
+
+  // the preset's name, with a down arrow for its list
+  bool name_hot = _preset_menu->getState() != _preset_menu->INACTIVE;
+  CRect r = g_head_name;
+  DrawBox(temp_bm, r, pal.box, name_hot ? pal.hover : pal.box_line);
+  char name[256] = {0};
+  _gui->blkFx()->getProgramName(name);
+  temp_bm->setFont(kNormalFont, /*sz*/ 11, kBoldFace);
+  temp_bm->setFontColor(name_hot ? pal.hover : pal.value);
+  temp_bm->drawString(name, CRect(r.left + 6, r.top, r.right - 14, r.bottom), 0, kLeftText);
+  DrawArrow(temp_bm, (float)r.right - 8.0f, (float)(r.top + r.bottom) * 0.5f, 7.0f, 0,
+            name_hot ? pal.hover : pal.label);
+
+  // Settings
+  bool set_hot = _settings_menu->getState() != _settings_menu->INACTIVE;
+  r = CRect(w - 4 - HEAD_SETTINGS_W, 3, w - 4, 19);
+  DrawBox(temp_bm, r, pal.box, set_hot ? pal.hover : pal.box_line);
+  temp_bm->setFont(kNormalFont, /*sz*/ 11, kNormalFace);
+  temp_bm->setFontColor(set_hot ? pal.hover : pal.value);
+  temp_bm->drawString("Settings", CRect(r.left + 8, r.top, r.right - 14, r.bottom), 0, kLeftText);
+  DrawArrow(temp_bm, (float)r.right - 8.0f, (float)(r.top + r.bottom) * 0.5f, 7.0f, 0,
+            set_hot ? pal.hover : pal.label);
+
+  temp_bm->blend(context, update_rect, rel_update_rect, 255, false);
 }

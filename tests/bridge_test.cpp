@@ -8,7 +8,8 @@
 // 3. The editor opens at every size in the menu, a size dragged to and the largest, in every skin
 //    & style, at the right size: one row per effect in use plus the "+" row.
 // 4. In both styles, clicking "+" adds a do-nothing filter after the last effect, clicking a
-//    row's "x" removes that effect and moves the ones below up.
+//    row's "x" removes that effect and moves the ones below up, and the header's next & previous
+//    buttons load the next & previous presets.
 
 #define NOMINMAX
 #include <windows.h>
@@ -40,6 +41,8 @@ struct NoListener : public EngineListener {
   void endEdit(int) override {}
   void latencyChanged() override {}
   void viewChangeRequested(int, int, int) override {}
+  void programChangedByEditor() override { program_changes++; }
+  int program_changes = 0;
 };
 
 // optional: switch the editor's skin every 20 buffers while rendering
@@ -70,11 +73,12 @@ static std::vector<int> usedFx(Engine& e)
   return used;
 }
 
-// editor height in view units: global controls (36), spectrograms, effect rows and the "+" row
+// editor height in view units: header (22), global controls (24), spectrograms, effect rows and
+// the "+" row
 static int editorHeight(Engine& e)
 {
   int rows = (int)usedFx(e).size();
-  return 24 + 191 + 24 * (rows + (rows < 8 ? 1 : 0));
+  return 22 + 24 + 191 + 24 * (rows + (rows < 8 ? 1 : 0));
 }
 
 // a left click at view position (x, y) in the editor's window
@@ -256,7 +260,7 @@ int main()
     check(h == editorHeight(e), "editor: one row per effect in use and a + row");
 
     // "+" is the row after the effects
-    click(frame, 205, 215 + 24 * (int)before.size() + 12);
+    click(frame, 205, 237 + 24 * (int)before.size() + 12);
     std::vector<int> added = usedFx(e);
     int slot = before.back() + 1;
     check(added.size() == before.size() + 1 && added.back() == slot &&
@@ -273,12 +277,25 @@ int main()
     check(r.bottom == editorHeight(e), "the editor grows by a row");
 
     // "x" on the first row
-    click(frame, 9, 215 + 12);
+    click(frame, 9, 237 + 12);
     std::vector<int> removed = usedFx(e);
     bool moved_up = removed.size() == before.size();
     for (int i = 0; i < 5; i++)
       moved_up = moved_up && e.getParam(4 + i) == first[i];
     check(moved_up, "x removes the effect and the ones below move up");
+
+    // the header's next & previous preset buttons load the program and tell the wrapper
+    int changes = listener.program_changes;
+    click(frame, 213, 11);
+    Engine ref(&listener);
+    ref.setProgram(34);
+    bool loaded = true;
+    for (int i = 0; i < e.numParams(); i++)
+      loaded = loaded && e.getParam(i) == ref.getParam(i);
+    bool next_ok = e.getProgram() == 34 && loaded && listener.program_changes == changes + 1;
+    click(frame, 13, 11);
+    check(next_ok && e.getProgram() == 33 && listener.program_changes == changes + 2,
+          "header: next preset, then previous");
 
     e.closeEditor();
     DestroyWindow(wnd);

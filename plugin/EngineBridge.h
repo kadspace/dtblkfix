@@ -30,6 +30,9 @@ public:
   // Size, Skin or Style picked in the editor, or its rows changed (called from inside the
   // editor's event handling)
   virtual void viewChangeRequested(int scale_pct, int skin_idx, int style) = 0;
+  // a program was picked in the editor and is now loaded (called from inside the editor's event
+  // handling): tell the host, and reopen the editor (its rows may have changed)
+  virtual void programChangedByEditor() = 0;
 };
 
 class Engine {

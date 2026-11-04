@@ -232,6 +232,16 @@ void DtBlkFixProcessor::viewChangeRequested(int scale_pct, int skin_idx, int sty
   triggerAsyncUpdate();
 }
 
+void DtBlkFixProcessor::programChangedByEditor()
+{
+  // a preset picked in the editor's header (already loaded): reopen the editor afterwards, its
+  // effect rows follow the program
+  triggerAsyncUpdate();
+  updateHostDisplay(juce::AudioProcessorListener::ChangeDetails()
+                        .withProgramChanged(true)
+                        .withParameterInfoChanged(true));
+}
+
 void DtBlkFixProcessor::handleAsyncUpdate()
 {
   if (onViewChange)

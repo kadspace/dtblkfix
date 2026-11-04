@@ -66,6 +66,7 @@ private: // EngineListener
   void endEdit(int index) override;
   void latencyChanged() override;
   void viewChangeRequested(int scale_pct, int skin_idx, int style) override;
+  void programChangedByEditor() override;
 
   // AsyncUpdater: tell the editor about a view change
   void handleAsyncUpdate() override;

@@ -72,6 +72,8 @@ struct GuiPalette {
 class GuiViewListener {
 public:
   virtual void guiViewChange(int scale_pct, int skin_idx, int style) = 0;
+  // DtBlkFix: a program (preset) was picked in the editor's header; load it and tell the host
+  virtual void guiProgramChange(int program) = 0;
 };
 
 class Gui;
@@ -91,6 +93,46 @@ public:
 
   _Ptr<Gui> _gui;
   bool _hover;
+};
+
+//-----------------------------------------------------------------------------
+// DtBlkFix: the header above the global controls: the preset (previous, pick from a list, next)
+// and a Settings menu (Size, Skin, Style). Its controls are owner-drawn; the header draws them.
+class HeaderCtrl;
+class HeaderButton : public CView {
+public:
+  HeaderButton(HeaderCtrl* header, int step);
+  void setSize(CastCRect r);
+  virtual void draw(CDrawContext* /*context*/) {}
+  virtual CMouseEventResult onMouseDown(CPoint& mouse, const long& buttons);
+  virtual CMouseEventResult onMouseEntered(CPoint& mouse, const long& buttons);
+  virtual CMouseEventResult onMouseExited(CPoint& mouse, const long& buttons);
+
+  _Ptr<HeaderCtrl> _header;
+  int _step; // -1 previous, +1 next
+  bool _hover;
+};
+
+class HeaderCtrl
+    : public CViewContainer
+    , public CControlListener {
+public:
+  HeaderCtrl();
+  void init(Gui* gui, CastCRect rect);
+
+  virtual void draw(CDrawContext* context);
+  virtual void drawRect(CDrawContext* context, const CRect& update_rect);
+  virtual void valueChanged(CControl* ctrl);
+
+  // the previous or next preset (skipping the "--------" dividers between groups of presets)
+  void step(int dir);
+  bool divider(int program);
+
+  _Ptr<Gui> _gui;
+  VstGuiRef<HeaderButton> _prev, _next;
+  VstGuiRef<COptionMenuOwnerDraw> _preset_menu, _settings_menu;
+  int _num_presets; // programs that are presets (the last program resets the current one)
+  int _reset_entry;  // the menu entry for that last program
 };
 
 //-----------------------------------------------------------------------------
@@ -184,8 +226,16 @@ public: // DtBlkFix: UI scale and skin
   // pick the palette for the skin (from its background)
   void makePalette();
 
-  // Size, Skin & Style submenus of the spectrogram menus
-  Array<VstGuiRef<COptionMenu>, 2> _size_menu, _skin_menu, _style_menu;
+  // Size, Skin & Style submenus of the header's Settings menu
+  VstGuiRef<COptionMenu> _size_menu, _skin_menu, _style_menu;
+  void addViewMenus(COptionMenu* menu);
+
+  // the header (preset & settings), above the global controls
+  VstGuiRef<HeaderCtrl> _header;
+  int headHeight() { return editableRows() ? 22 : 0; }
+
+  // load a program picked in the header (the host is told)
+  void selectProgram(int program);
 
 public: // DtBlkFix: only the effects in use get a row, with "+" to add one and "x" to remove one
   // (only with a view listener; otherwise all 8 rows, as in the original)

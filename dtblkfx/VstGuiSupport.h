@@ -524,6 +524,9 @@ CCoord StringWidth(CDrawContext* context, const char* str);
 // DtBlkFix: a filled box with rounded corners and a one pixel outline (at any scale)
 void DrawBox(CDrawContext* context, CRect r, const CColor& fill, const CColor& line, int radius = 3);
 
+// DtBlkFix: a filled triangle pointing left (dir -1), right (+1) or down (0), centred on (x, y)
+void DrawArrow(CDrawContext* context, float x, float y, float size, int dir, const CColor& col);
+
 //-------------------------------------------------------------------------------------------------
 // set the drawing context offset to match the given view
 void OffsetDrawContext(CDrawContext* dc, CView* view);

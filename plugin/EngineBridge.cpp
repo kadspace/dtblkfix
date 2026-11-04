@@ -123,6 +123,13 @@ struct Engine::Impl
   {
     listener->viewChangeRequested(scale_pct, skin_idx, style);
   }
+  virtual void guiProgramChange(int program)
+  {
+    if (program < 0 || program >= fx->getNumPrograms())
+      return;
+    fx->setProgram(program);
+    listener->programChangedByEditor();
+  }
 };
 
 Engine::Engine(EngineListener* listener)
