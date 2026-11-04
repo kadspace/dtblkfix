@@ -118,6 +118,22 @@ void DtBlkFixEditor::updateSize()
   _own_resize = true;
   setSize(juce::roundToInt(_pix_width / scale), juce::roundToInt(_pix_height / scale));
   _own_resize = false;
+  updateGrip();
+}
+
+void DtBlkFixEditor::updateGrip()
+{
+  // the grip, and a hole for it in the editor's window (which would cover it); the window is new
+  // each time the editor opens, so this is done then too, not only when the size changes
+  if (_grip)
+    _grip->setBounds(getWidth() - gripSize, getHeight() - gripSize, gripSize, gripSize);
+  if (!_open || _display_scale <= 0.0f)
+    return;
+  float s = _display_scale;
+  dtblkfix::Engine::setEditorWindowCorner(_host.getHWND(),
+                                          juce::roundToInt(getWidth() * s),
+                                          juce::roundToInt(getHeight() * s),
+                                          juce::roundToInt(gripSize * s));
 }
 
 void DtBlkFixEditor::applyDraggedSize()
@@ -147,17 +163,10 @@ void DtBlkFixEditor::resized()
 {
   _host.setBounds(getLocalBounds());
 
-  // the grip, and a hole for it in the editor's window (which would cover it)
-  const int grip = 14;
-  if (_grip)
-    _grip->setBounds(getWidth() - grip, getHeight() - grip, grip, grip);
+  updateGrip();
   if (!_open || _display_scale <= 0.0f)
     return;
   float s = _display_scale;
-  dtblkfix::Engine::setEditorWindowCorner(_host.getHWND(),
-                                          juce::roundToInt(getWidth() * s),
-                                          juce::roundToInt(getHeight() * s),
-                                          juce::roundToInt(grip * s));
 
   // dragged (the grip or the host's window edge): the size it's at, in percent of the original
   // (a host rounding our own size by a pixel isn't a drag)

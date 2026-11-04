@@ -40,7 +40,10 @@ private:
   void openEditor();
   void closeEditor();
   void updateSize();
+  void updateGrip();
   void applyDraggedSize();
+
+  static constexpr int gripSize = 14; // points
 
   DtBlkFixProcessor& _processor;
 
