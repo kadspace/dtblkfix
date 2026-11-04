@@ -327,6 +327,34 @@ bool Engine::openEditor(void* window, int scale_pct, int skin_idx, int style)
   return gui->open(window);
 }
 
+void Engine::setEditorWindowCorner(void* window, int width, int height, int corner)
+{
+  if (!window)
+    return;
+  HRGN rgn = CreateRectRgn(0, 0, width, height);
+  if (corner > 0) {
+    HRGN c = CreateRectRgn(width - corner, height - corner, width, height);
+    CombineRgn(rgn, rgn, c, RGN_DIFF);
+    DeleteObject(c);
+  }
+  // the window owns the region from here
+  if (!SetWindowRgn((HWND)window, rgn, TRUE))
+    DeleteObject(rgn);
+}
+
+bool Engine::editorColours(uint32_t& background, uint32_t& label) const
+{
+  Gui* gui = impl->fx->gui();
+  if (!gui || !gui->_ok || !gui->_images.glob_bg)
+    return false;
+  // the plain background at the bottom left of the global controls' image (the alpha byte is
+  // dropped), and the label colour that suits it
+  background = (uint32_t)(PtrRGBA(gui->_images.glob_bg->data())._get() & 0xffffff);
+  const CColor& c = gui->_palette.label;
+  label = ((uint32_t)c.red << 16) | ((uint32_t)c.green << 8) | (uint32_t)c.blue;
+  return true;
+}
+
 void Engine::closeEditor()
 {
   if (impl->fx->gui())

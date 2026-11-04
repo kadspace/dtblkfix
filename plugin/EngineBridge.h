@@ -41,8 +41,10 @@ public:
   // skins: "Original" (the dtblkfx folder itself) and each folder in dtblkfx\skins
   static std::vector<std::string> skinNames();
 
-  // UI sizes offered, in percent
+  // UI sizes offered in the Size menu, in percent, and the range the window can be dragged to
   static std::vector<int> scales();
+  static int minScale() { return 75; }
+  static int maxScale() { return 300; }
 
   explicit Engine(EngineListener* listener);
   ~Engine();
@@ -79,6 +81,13 @@ public:
   bool openEditor(void* window, int scale_pct, int skin_idx, int style = 0);
   void closeEditor();
   void idleEditor();
+
+  // leave out a square at the bottom right of the editor window (width x height pixels), where the
+  // wrapper's resize grip goes; 0 for none
+  static void setEditorWindowCorner(void* window, int width, int height, int corner);
+
+  // the open editor's background & label colours (0xrrggbb), for the resize grip
+  bool editorColours(uint32_t& background, uint32_t& label) const;
 
 private:
   struct Impl;

@@ -5,8 +5,8 @@
 // 1. State round trip: settings, programs, renamed program, editor size, skin & style come back,
 //    the state is the same bytes again and renders the same audio.
 // 2. A bare DtBlkFx chunk (as the VST2 version saves) loads with the default size, skin & style.
-// 3. The editor opens at every size, skin & style, at the right size: one row per effect in use
-//    plus the "+" row.
+// 3. The editor opens at every size in the menu, a size dragged to and the largest, in every skin
+//    & style, at the right size: one row per effect in use plus the "+" row.
 // 4. In both styles, clicking "+" adds a do-nothing filter after the last effect, clicking a
 //    row's "x" removes that effect and moves the ones below up.
 
@@ -177,8 +177,12 @@ int main()
 
   // --- 3. editor at each size, skin & style
   check(a.hasEditor(), "editor available");
+  // the menu's sizes, a size dragged to and the largest
+  std::vector<int> sizes = Engine::scales();
+  sizes.push_back(137);
+  sizes.push_back(Engine::maxScale());
   for (int style = 0; style < 2; style++)
-  for (int scale : Engine::scales()) {
+  for (int scale : sizes) {
     for (int skin = 0; skin < (int)skins.size(); skin++) {
       int w = 0, h = 0;
       a.editorSize(scale, w, h);
@@ -206,6 +210,32 @@ int main()
                 abs(h - (int)floor(editorHeight(a) * scale / 100.0 + 0.5)) <= 1,
             what);
     }
+  }
+
+  // the resize grip: a hole for it in the editor window's bottom right corner, & its colours
+  {
+    int w = 0, h = 0;
+    a.editorSize(150, w, h);
+    HWND wnd = (HWND)a.createEditorWindow(w, h);
+    int dark = 0;
+    for (int i = 0; i < (int)skins.size(); i++)
+      if (skins[i] == "Dark")
+        dark = i;
+    a.openEditor(wnd, 150, dark, 1);
+    uint32_t background = 0, label = 0;
+    bool colours = a.editorColours(background, label);
+    Engine::setEditorWindowCorner(wnd, w, h, 21);
+    HRGN rgn = CreateRectRgn(0, 0, 0, 0);
+    bool hole = GetWindowRgn(wnd, rgn) != ERROR && !PtInRegion(rgn, w - 5, h - 5) &&
+                !PtInRegion(rgn, w - 21, h - 21) && PtInRegion(rgn, w - 22, h - 5) &&
+                PtInRegion(rgn, 5, 5);
+    DeleteObject(rgn);
+    a.closeEditor();
+    DestroyWindow(wnd);
+    check(hole, "the editor window leaves out the grip's corner");
+    int lum = (int)((background >> 16) & 0xff) + (int)((background >> 8) & 0xff) +
+              (int)(background & 0xff);
+    check(colours && label != background && lum < 3 * 128, "grip colours from the Dark skin");
   }
 
   // --- 4. "+" and "x", in both styles
