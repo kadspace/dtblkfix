@@ -28,7 +28,7 @@ Apart from Sync, the audio is bit-identical to the original. That's the whole li
 
 Windows 10 or later, 64-bit.
 
-Download `DtBlkFix.vst3` from the [latest release](https://github.com/kadspace/dtblkfix/releases/latest) and copy it into your VST3 folder, usually `C:\Program Files\Common Files\VST3`. Then rescan plugins in your DAW. It's one file with everything it needs inside, its licenses included. The first time it loads, it unpacks them to `%LOCALAPPDATA%\DtBlkFix.0.0`.
+Download `DtBlkFix.vst3` from the [latest release](https://github.com/kadspace/dtblkfix/releases/latest) and copy it into your VST3 folder, usually `C:\Program Files\Common Files\VST3`. Then rescan plugins in your DAW. It's one file with everything it needs inside, its licenses included. The first time it loads, it unpacks them to `%LOCALAPPDATA%\DtBlkFix\1.0.0`.
 
 DtBlkFix has its own plugin ID, so it installs next to the original DtBlkFx and doesn't replace it. It has the same presets and saves its settings in the same format.
 
@@ -42,7 +42,7 @@ Each row is an effect, run in order from the top. Click **+** below the last row
 
 Drag the bottom right corner (or the window's edge, if your DAW allows it) to any size and shape: the editor scales to the largest size that fits, and redraws sharp when you stop. The gear at the top right opens the settings in place of the spectrograms: **Size**, **Skin** (Original, Dark or Warm) and **Style** (Original, or Boxes, which is easier to read). A change applies straight away; click the gear again to go back. Size, skin and style are saved with the plugin's state.
 
-To make a skin, copy the `stereo_*.png` files from `%LOCALAPPDATA%\DtBlkFix.0.0\dtblkfx` into a new folder in its `skins` folder, keep their sizes, and edit them. The folder's name is the skin's name. The Dark and Warm skins are made from the originals by [`tools/make_skins.py`](tools/make_skins.py).
+To make a skin, copy the `stereo_*.png` files from `%LOCALAPPDATA%\DtBlkFix\1.0.0\dtblkfx` into a new folder in its `skins` folder, keep their sizes, and edit them. The folder's name is the skin's name. The Dark and Warm skins are made from the originals by [`tools/make_skins.py`](tools/make_skins.py).
 
 ## Building
 
