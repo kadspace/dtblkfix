@@ -35,6 +35,37 @@ target_link_libraries(DtBlkFix
 dtblkfix_copy_resources(DtBlkFix_VST3 "$<TARGET_FILE_DIR:DtBlkFix_VST3>/../Resources/dtblkfx")
 dtblkfix_copy_resources(DtBlkFix_Standalone "$<TARGET_FILE_DIR:DtBlkFix_Standalone>/dtblkfx")
 
+# the single-file VST3: the "dtblkfx" folder and the licenses, packed into the plugin as a resource
+# (tools/pack_resources.py). The plugin unpacks it to %LOCALAPPDATA%\DtBlkFix\<version> when there's
+# no "dtblkfx" folder beside it or in its bundle.
+if(DTBLKFIX_FFTW_DIR)
+  set(pack ${CMAKE_CURRENT_BINARY_DIR}/dtblkfix_resources.pak)
+  set(licenses
+    licenses/DtBlkFix-LICENSE.txt=${PROJECT_SOURCE_DIR}/LICENSE
+    licenses/THIRD_PARTY_NOTICES.md=${PROJECT_SOURCE_DIR}/THIRD_PARTY_NOTICES.md
+    licenses/FFTW-COPYING.txt=${PROJECT_SOURCE_DIR}/fftw/COPYING
+    licenses/JUCE-LICENSE.md=${DTBLKFIX_JUCE_DIR}/LICENSE.md
+    licenses/VST3_SDK-LICENSE.txt=${DTBLKFIX_JUCE_DIR}/modules/juce_audio_processors_headless/format_types/VST3_SDK/LICENSE.txt)
+  set(license_files ${licenses})
+  list(TRANSFORM license_files REPLACE "^[^=]*=" "")
+  add_custom_command(OUTPUT ${pack}
+    COMMAND Python3::Interpreter ${PROJECT_SOURCE_DIR}/tools/pack_resources.py ${pack}
+            dtblkfx=${DTBLKFIX_STAGE}
+            dtblkfx/libfftw3f-3.dll=${DTBLKFIX_FFTW_DIR}/libfftw3f-3.dll ${licenses}
+    DEPENDS ${PROJECT_SOURCE_DIR}/tools/pack_resources.py ${DTBLKFIX_STAGE}/skins/.done
+            ${DTBLKFIX_FFTW_DIR}/libfftw3f-3.dll ${license_files}
+    COMMENT "Packing the resources into the plugin")
+  add_custom_target(dtblkfix_pack DEPENDS ${pack})
+  add_dependencies(dtblkfix_pack dtblkfix_resources)
+
+  set(DTBLKFIX_PACK ${pack})
+  configure_file(resources.rc.in ${CMAKE_CURRENT_BINARY_DIR}/resources.rc @ONLY)
+  set_source_files_properties(${CMAKE_CURRENT_BINARY_DIR}/resources.rc PROPERTIES
+    OBJECT_DEPENDS ${pack})
+  target_sources(DtBlkFix_VST3 PRIVATE ${CMAKE_CURRENT_BINARY_DIR}/resources.rc)
+  add_dependencies(DtBlkFix_VST3 dtblkfix_pack)
+endif()
+
 # the processor, as a console app (tests/plugin_test.cpp)
 if(DTBLKFIX_TESTS)
   juce_add_console_app(dtblkfix_plugin_test PRODUCT_NAME "dtblkfix_plugin_test")
@@ -49,5 +80,19 @@ if(DTBLKFIX_TESTS)
   dtblkfix_copy_resources(dtblkfix_plugin_test "$<TARGET_FILE_DIR:dtblkfix_plugin_test>/dtblkfx")
   if(DTBLKFIX_FFTW_DIR)
     add_test(NAME plugin_state COMMAND dtblkfix_plugin_test)
+
+    # the single-file VST3 in a host (tests/host_test.cpp): unpacking, then using what's unpacked
+    juce_add_console_app(dtblkfix_host_test PRODUCT_NAME "dtblkfix_host_test")
+    target_sources(dtblkfix_host_test PRIVATE ${PROJECT_SOURCE_DIR}/tests/host_test.cpp)
+    target_compile_definitions(dtblkfix_host_test PRIVATE ${DTBLKFIX_JUCE_DEFS}
+      JUCE_PLUGINHOST_VST3=1 DTBLKFIX_VERSION="${PROJECT_VERSION}")
+    target_link_libraries(dtblkfix_host_test PRIVATE
+      juce::juce_audio_processors juce::juce_recommended_config_flags)
+    add_dependencies(dtblkfix_host_test DtBlkFix_VST3)
+    set(work ${CMAKE_CURRENT_BINARY_DIR}/host_test)
+    add_test(NAME host_unpack
+      COMMAND dtblkfix_host_test $<TARGET_FILE:DtBlkFix_VST3> ${work} --fresh)
+    add_test(NAME host_reuse COMMAND dtblkfix_host_test $<TARGET_FILE:DtBlkFix_VST3> ${work})
+    set_tests_properties(host_reuse PROPERTIES DEPENDS host_unpack)
   endif()
 endif()

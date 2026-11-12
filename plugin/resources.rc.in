@@ -1,0 +1,2 @@
+// the "dtblkfx" folder and the licenses, packed by tools/pack_resources.py (see plugin/CMakeLists.txt)
+DTBLKFIX_RESOURCES RCDATA "@DTBLKFIX_PACK@"

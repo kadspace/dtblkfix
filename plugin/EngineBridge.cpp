@@ -4,7 +4,9 @@
 #include <StdAfx.h>
 
 #include <algorithm>
+#include <fstream>
 #include <sstream>
+#include <stdint.h>
 
 #include "DtBlkFx.hpp"
 #include "EngineBridge.h"
@@ -33,7 +35,148 @@ static bool Exists(const std::string& path)
   return GetFileAttributesA(path.c_str()) != INVALID_FILE_ATTRIBUTES;
 }
 
-// folder holding "dtblkfx\": next to the plugin, or in the VST3 bundle's Resources folder
+//-------------------------------------------------------------------------------------------------
+// The single-file plugin carries its "dtblkfx" folder and the licenses as a resource, packed by
+// tools/pack_resources.py: "DTBXPAK1", then for each file a u32 name length, the name, a u32 size
+// and the data, ending with a name length of 0. It's unpacked once, to
+// %LOCALAPPDATA%\DtBlkFix\<version>\, with a ".pack" file holding the pack's fingerprint.
+
+static uint32_t ReadU32(const unsigned char* p)
+{
+  return p[0] | (p[1] << 8) | (p[2] << 16) | ((uint32_t)p[3] << 24);
+}
+
+static std::string Fingerprint(const unsigned char* p, size_t size)
+{
+  uint64_t h = 14695981039346656037ull; // FNV-1a
+  for (size_t i = 0; i < size; i++)
+    h = (h ^ p[i]) * 1099511628211ull;
+  char s[17];
+  sprintf(s, "%016llx", (unsigned long long)h);
+  return s;
+}
+
+static std::string ReadText(const std::string& path)
+{
+  std::ifstream f(path.c_str());
+  std::string s;
+  std::getline(f, s);
+  return s;
+}
+
+// makes every folder in dir (which ends with '\')
+static bool MakeDirs(const std::string& dir)
+{
+  for (size_t i = dir.find('\\', 3); i != std::string::npos; i = dir.find('\\', i + 1))
+    CreateDirectoryA(dir.substr(0, i).c_str(), NULL);
+  return Exists(dir);
+}
+
+static void DeleteTree(const std::string& dir)
+{
+  WIN32_FIND_DATAA fd;
+  HANDLE h = FindFirstFileA((dir + "*").c_str(), &fd);
+  if (h != INVALID_HANDLE_VALUE) {
+    do {
+      std::string name = fd.cFileName;
+      if (name == "." || name == "..")
+        continue;
+      if (fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)
+        DeleteTree(dir + name + "\\");
+      else
+        DeleteFileA((dir + name).c_str());
+    } while (FindNextFileA(h, &fd));
+    FindClose(h);
+  }
+  RemoveDirectoryA(dir.c_str());
+}
+
+static bool WriteAll(const std::string& path, const void* data, size_t size)
+{
+  HANDLE h = CreateFileA(
+      path.c_str(), GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
+  if (h == INVALID_HANDLE_VALUE)
+    return false;
+  DWORD written = 0;
+  bool ok = WriteFile(h, data, (DWORD)size, &written, NULL) && written == size;
+  CloseHandle(h);
+  return ok;
+}
+
+// unpacks into dir (which ends with '\'); false if the pack is damaged or a write failed
+static bool Unpack(const unsigned char* p, size_t size, const std::string& dir)
+{
+  const unsigned char* end = p + size;
+  if (size < 8 || memcmp(p, "DTBXPAK1", 8) != 0)
+    return false;
+  p += 8;
+  for (;;) {
+    if (end - p < 4)
+      return false;
+    uint32_t name_len = ReadU32(p);
+    p += 4;
+    if (name_len == 0)
+      return true;
+    if ((size_t)(end - p) < (size_t)name_len + 4)
+      return false;
+    std::string name((const char*)p, name_len);
+    p += name_len;
+    uint32_t len = ReadU32(p);
+    p += 4;
+    if ((size_t)(end - p) < len || name.find("..") != std::string::npos)
+      return false;
+    std::string path = dir + name;
+    if (!MakeDirs(path.substr(0, path.find_last_of('\\') + 1)) || !WriteAll(path, p, len))
+      return false;
+    p += len;
+  }
+}
+
+// the folder holding the unpacked "dtblkfx\", or "" if there's no pack or it can't be unpacked
+static std::string UnpackedDir(HMODULE module)
+{
+  HRSRC res = FindResourceA(module, "DTBLKFIX_RESOURCES", MAKEINTRESOURCEA(10) /*RT_RCDATA*/);
+  HGLOBAL loaded = res ? LoadResource(module, res) : NULL;
+  const unsigned char* pack = loaded ? (const unsigned char*)LockResource(loaded) : NULL;
+  if (!pack)
+    return "";
+  size_t size = SizeofResource(module, res);
+
+  char appdata[MAX_PATH * 2];
+  DWORD n = GetEnvironmentVariableA("LOCALAPPDATA", appdata, sizeof(appdata));
+  if (n == 0 || n >= sizeof(appdata))
+    return "";
+  std::string base = std::string(appdata, n) + "\\DtBlkFix\\";
+  std::string dir = base + DTBLKFIX_VERSION "\\";
+  std::string id = Fingerprint(pack, size);
+  if (ReadText(dir + ".pack") == id)
+    return dir;
+
+  // unpack into a folder of its own, then move it into place, so that a host loading the plugin at
+  // the same time never sees half of it
+  std::ostringstream tmp;
+  tmp << base << DTBLKFIX_VERSION << ".unpacking-" << GetCurrentProcessId() << "\\";
+  DeleteTree(tmp.str());
+  if (!MakeDirs(tmp.str()) || !Unpack(pack, size, tmp.str()) ||
+      !WriteAll(tmp.str() + ".pack", id.data(), id.size())) {
+    DeleteTree(tmp.str());
+    return "";
+  }
+  if (ReadText(dir + ".pack") != id) {
+    DeleteTree(dir); // an older or half-written unpack of this version
+    if (MoveFileA(tmp.str().substr(0, tmp.str().size() - 1).c_str(),
+                  dir.substr(0, dir.size() - 1).c_str()))
+      return dir;
+  }
+  if (ReadText(dir + ".pack") == id) { // another host got there first
+    DeleteTree(tmp.str());
+    return dir;
+  }
+  return tmp.str(); // the old folder is in use: run from this one
+}
+
+// folder holding "dtblkfx\": next to the plugin, in the VST3 bundle's Resources folder, or (for the
+// single-file plugin) unpacked from the plugin
 static std::string PluginDir()
 {
   char path[4096] = {0};
@@ -41,9 +184,12 @@ static std::string PluginDir()
   std::string dir = path;
   dir = dir.substr(0, dir.find_last_of("\\/") + 1);
   std::string resources = dir + "..\\Resources\\";
-  if (!Exists(dir + "dtblkfx") && Exists(resources + "dtblkfx"))
+  if (Exists(dir + "dtblkfx"))
+    return dir;
+  if (Exists(resources + "dtblkfx"))
     return resources;
-  return dir;
+  std::string unpacked = UnpackedDir(ThisModule());
+  return unpacked.empty() ? dir : unpacked;
 }
 
 static std::string SkinDir(int idx)

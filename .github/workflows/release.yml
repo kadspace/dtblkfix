@@ -1,7 +1,7 @@
 name: release
 
-# a tag v<version> builds, tests and packages DtBlkFix and attaches a zip of the VST3 bundle to a
-# draft release, to be checked and published by hand
+# a tag v<version> builds, tests and packages DtBlkFix and attaches the single-file plugin,
+# DtBlkFix.vst3, to a draft release, to be checked and published by hand
 
 on:
   push:
@@ -37,8 +37,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          (cd dist && zip -qr "../DtBlkFix-$VERSION-vst3.zip" DtBlkFix.vst3)
-          unzip -l "DtBlkFix-$VERSION-vst3.zip"
+          ls -l dist/DtBlkFix.vst3
           notes=$(awk -v v="## $VERSION" '$0 ~ "^"v {on=1; next} /^## / {on=0} on' CHANGELOG.md)
           gh release create "$GITHUB_REF_NAME" --draft --title "DtBlkFix $VERSION" \
-            --notes "$notes" "DtBlkFix-$VERSION-vst3.zip"
+            --notes "$notes" dist/DtBlkFix.vst3

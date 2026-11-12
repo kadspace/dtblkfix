@@ -28,7 +28,7 @@ Apart from Sync, the audio is bit-identical to the original. That's the whole li
 
 Windows 10 or later, 64-bit.
 
-Unzip `DtBlkFix-1.0.0-vst3.zip` and copy the `DtBlkFix.vst3` folder into your VST3 folder, usually `C:\Program Files\Common Files\VST3`. Then rescan plugins in your DAW. Everything the plugin needs is inside `DtBlkFix.vst3`, its licenses included.
+Download `DtBlkFix.vst3` from the [latest release](https://github.com/kadspace/dtblkfix/releases/latest) and copy it into your VST3 folder, usually `C:\Program Files\Common Files\VST3`. Then rescan plugins in your DAW. It's one file with everything it needs inside, its licenses included. The first time it loads, it unpacks them to `%LOCALAPPDATA%\DtBlkFix.0.0`.
 
 DtBlkFix has its own plugin ID, so it installs next to the original DtBlkFx and doesn't replace it. It has the same presets and saves its settings in the same format.
 
@@ -42,7 +42,7 @@ Each row is an effect, run in order from the top. Click **+** below the last row
 
 Drag the bottom right corner (or the window's edge, if your DAW allows it) to any size and shape: the editor scales to the largest size that fits, and redraws sharp when you stop. The gear at the top right opens the settings in place of the spectrograms: **Size**, **Skin** (Original, Dark or Warm) and **Style** (Original, or Boxes, which is easier to read). A change applies straight away; click the gear again to go back. Size, skin and style are saved with the plugin's state.
 
-To make a skin, copy the `stereo_*.png` files from `DtBlkFix.vst3\Contents\Resources\dtblkfx` into a new folder in `dtblkfx\skins`, keep their sizes, and edit them. The folder's name is the skin's name. The Dark and Warm skins are made from the originals by [`tools/make_skins.py`](tools/make_skins.py).
+To make a skin, copy the `stereo_*.png` files from `%LOCALAPPDATA%\DtBlkFix.0.0\dtblkfx` into a new folder in its `skins` folder, keep their sizes, and edit them. The folder's name is the skin's name. The Dark and Warm skins are made from the originals by [`tools/make_skins.py`](tools/make_skins.py).
 
 ## Building
 
@@ -54,7 +54,7 @@ cmake --build build --config Release
 ctest --test-dir build -C Release
 ```
 
-The VST3 ends up in `build/plugin/DtBlkFix_artefacts/Release/VST3` (CMake also builds a standalone app, which CI uses for a resize test). The comparison against the original engine runs when `DTBLKFIX_REFERENCE_DIR` points to a checkout of it; [`.github/workflows/build.yml`](.github/workflows/build.yml) shows how CI does it, packaging included.
+The VST3 ends up in `build/plugin/DtBlkFix_artefacts/Release/VST3`, as a bundle whose `Contents/x86_64-win/DtBlkFix.vst3` is the single-file plugin: with `DTBLKFIX_FFTW_DIR` set, the `dtblkfx` folder and the licenses are packed into it by [`tools/pack_resources.py`](tools/pack_resources.py). [`packaging/package.ps1`](packaging/package.ps1) copies it out for release. CMake also builds a standalone app, which CI uses for a resize test. The comparison against the original engine runs when `DTBLKFIX_REFERENCE_DIR` points to a checkout of it; [`.github/workflows/build.yml`](.github/workflows/build.yml) shows how CI does it, packaging included.
 
 The plugin doesn't need the Steinberg VST2 SDK: `shim/` stands in for the few parts of it that the engine uses. If you have the SDK, `projects/DTBlkFx.sln` still builds the VST2: copy its `pluginterfaces/` and `public.sdk/` folders into `vstsdk/`, then open the solution or run `build_fork.bat`.
 

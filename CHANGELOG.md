@@ -20,5 +20,5 @@ The first release of DtBlkFix: Darrell Tam's DtBlkFx with the fixes below. The e
 
 - 64-bit VST3, built with JUCE 8, with the original editor inside. The VST2 SDK isn't needed to build it.
 - Own plugin ID and name, DtBlkFix, so it installs next to the original.
-- Ships as the `DtBlkFix.vst3` folder, to copy into the VST3 folder.
+- Ships as one file, `DtBlkFix.vst3`, to copy into the VST3 folder. It carries FFTW, the presets, the images, the skins and the licenses, and unpacks them to `%LOCALAPPDATA%\DtBlkFix.0.0` the first time it loads.
 - The plugin's 44 parameters, the factory presets and the format of the saved settings are the original's.

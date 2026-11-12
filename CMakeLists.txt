@@ -29,6 +29,7 @@ add_library(dtblkfix_bridge STATIC plugin/EngineBridge.cpp)
 target_link_libraries(dtblkfix_bridge PRIVATE dtblkfix_engine)
 target_include_directories(dtblkfix_bridge INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/plugin)
 dtblkfix_engine_options(dtblkfix_bridge)
+target_compile_definitions(dtblkfix_bridge PRIVATE DTBLKFIX_VERSION="${PROJECT_VERSION}")
 
 if(DTBLKFIX_TESTS)
   enable_testing()

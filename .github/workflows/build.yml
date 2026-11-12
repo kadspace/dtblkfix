@@ -77,8 +77,7 @@ jobs:
       - name: Package
         shell: pwsh
         run: >
-          ./packaging/package.ps1 -Build build/cmake -Juce build/JUCE -Out build/package
-          -Version $env:VERSION
+          ./packaging/package.ps1 -Build build/cmake -Out build/package
 
       - name: Drag the corner to resize (standalone app)
         continue-on-error: true
@@ -168,11 +167,12 @@ jobs:
             }
           }
 
-      # the bundle itself (the download unzips to DtBlkFix.vst3, ready to copy)
+      # the single-file plugin (GitHub zips artifacts; the release attaches the file itself)
       - uses: actions/upload-artifact@v4
         with:
           name: DtBlkFix-${{ env.VERSION }}-vst3
-          path: build/package/vst3
+          path: build/package/DtBlkFix.vst3
+          if-no-files-found: error
 
       - uses: actions/upload-artifact@v4
         if: always()
