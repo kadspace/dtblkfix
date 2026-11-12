@@ -254,9 +254,6 @@ public: // polled variables that are updated periodically
   // samples per beat
   float _samps_per_beat;
 
-  // most recent start of beat sample position
-  long _beat_start_abs;
-
   // last sample position bpm was polled
   long _prev_poll_abs;
 
@@ -268,6 +265,27 @@ public: // polled variables that are updated periodically
 
   // check whether enough samples have elapsed to update polled variables
   void pollUpdate(bool force);
+
+public: // song position, read from the host on every buffer (DtBlkFix)
+  // the beat grid in a stretch of time where the song position runs smoothly: beat k is at
+  // absolute sample ppq0_abs + k * samps_per_beat, from start_abs until the next segment
+  struct SyncSeg {
+    long start_abs;
+    double ppq0_abs;
+    double samps_per_beat;
+  };
+  enum { MAX_SYNC_SEGS = 32 };
+  SyncSeg _sync_seg[MAX_SYNC_SEGS];
+  int _sync_seg_n;
+
+  // true once the host has given us a song position
+  bool _have_ppq;
+
+  // read tempo & song position for the buffer starting at _curr_samp_abs
+  void readSongPos();
+
+  // absolute sample position of the last beat at or before samp_abs (or LONG_MIN for none)
+  long beatAtOrBefore(long samp_abs);
 
 public:
   // presets are stored here (and can be edited)

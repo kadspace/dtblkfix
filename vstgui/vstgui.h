@@ -114,6 +114,9 @@ public:
 	virtual void beginEdit (long index) {}
 	virtual void endEdit (long index) {}
 
+	// DtBlkFix: pixels per view unit for the frame (UI scaling)
+	virtual float getScale () const { return 1.0f; }
+
 protected:
 	VSTGUIEditorInterface () : frame (0) {}
 	virtual ~VSTGUIEditorInterface () {}
@@ -1257,6 +1260,7 @@ public:
 	virtual void  endEdit (long index);
 
 	virtual bool getCurrentMouseLocation (CPoint &where) const;				///< get current mouse location
+	float getScale () const { return pEditor ? pEditor->getScale () : 1.0f; }	///< DtBlkFix: pixels per view unit
 	virtual long getCurrentMouseButtons () const;							///< get current mouse buttons and key modifiers
 	virtual void setCursor (CCursorType type);								///< set mouse cursor
 

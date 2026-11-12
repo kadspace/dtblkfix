@@ -158,9 +158,116 @@ InternalReadPng::InternalReadPng(CContextRGBA* dst, string file_name_, ostream* 
 }
 
 //-------------------------------------------------------------------------------------------------
-bool /*success*/ ReadPng(CContextRGBA* dst, string file_name, ostream* err_str)
-// outside interface, read the PNG file into the alpha context
+// DtBlkFix: image scaling for the UI scale
+//-------------------------------------------------------------------------------------------------
+struct ResampleTaps {
+  int first;             // first source pixel
+  std::vector<float> wt; // weights, sum to 1
+};
+
+//-------------------------------------------------------------------------------------------------
+static float CatmullRom(float x)
+// cubic convolution kernel with a = -0.5
 {
-  InternalReadPng read_png(dst, file_name, err_str);
-  return read_png.ok;
+  x = fabsf(x);
+  if (x < 1.0f)
+    return (1.5f * x - 2.5f) * x * x + 1.0f;
+  if (x < 2.0f)
+    return ((-0.5f * x + 2.5f) * x - 4.0f) * x + 2.0f;
+  return 0.0f;
+}
+
+//-------------------------------------------------------------------------------------------------
+static void ResampleTapsFor(int src_n, int dst_n, std::vector<ResampleTaps>* taps)
+// filter taps for each destination pixel, the filter is widened when shrinking
+{
+  float scale = (float)dst_n / (float)src_n;
+  float stretch = scale < 1.0f ? 1.0f / scale : 1.0f;
+  float support = 2.0f * stretch;
+  taps->resize(dst_n);
+  for (int i = 0; i < dst_n; i++) {
+    float centre = ((float)i + 0.5f) / scale - 0.5f;
+    int first = (int)floorf(centre - support) + 1;
+    int last = (int)floorf(centre + support);
+    ResampleTaps& t = (*taps)[i];
+    t.first = first;
+    t.wt.resize(last - first + 1);
+    float sum = 0.0f;
+    for (int j = first; j <= last; j++)
+      sum += t.wt[j - first] = CatmullRom(((float)j - centre) / stretch);
+    for (int j = 0; j < (int)t.wt.size(); j++)
+      t.wt[j] /= sum;
+  }
+}
+
+//-------------------------------------------------------------------------------------------------
+static void ResampleImage(CContextRGBA* src, CContextRGBA* dst)
+// resample all of src into all of dst (premultiplied alpha)
+{
+  int sw = src->getPixelWidth(), sh = src->getPixelHeight();
+  int dw = dst->getPixelWidth(), dh = dst->getPixelHeight();
+  std::vector<ResampleTaps> tx, ty;
+  ResampleTapsFor(sw, dw, &tx);
+  ResampleTapsFor(sh, dh, &ty);
+
+  // horizontal pass into floats
+  std::vector<float> rows((size_t)sh * dw * 4);
+  for (int y = 0; y < sh; y++) {
+    for (int x = 0; x < dw; x++) {
+      float acc[4] = {0, 0, 0, 0};
+      const ResampleTaps& t = tx[x];
+      for (int j = 0; j < (int)t.wt.size(); j++) {
+        int sx = limit_range(t.first + j, 0, sw - 1);
+        PtrRGBA p = src->data(sx, y);
+        acc[0] += t.wt[j] * p.getRed();
+        acc[1] += t.wt[j] * p.getGreen();
+        acc[2] += t.wt[j] * p.getBlue();
+        acc[3] += t.wt[j] * p.getAlpha();
+      }
+      for (int c = 0; c < 4; c++)
+        rows[((size_t)y * dw + x) * 4 + c] = acc[c];
+    }
+  }
+
+  // vertical pass into dst
+  for (int y = 0; y < dh; y++) {
+    const ResampleTaps& t = ty[y];
+    for (int x = 0; x < dw; x++) {
+      float acc[4] = {0, 0, 0, 0};
+      for (int j = 0; j < (int)t.wt.size(); j++) {
+        int sy = limit_range(t.first + j, 0, sh - 1);
+        const float* p = &rows[((size_t)sy * dw + x) * 4];
+        for (int c = 0; c < 4; c++)
+          acc[c] += t.wt[j] * p[c];
+      }
+      unsigned long a = (unsigned long)limit_range(acc[3] + 0.5f, 0.0f, 255.0f);
+      unsigned long r = (unsigned long)limit_range(acc[0] + 0.5f, 0.0f, (float)a);
+      unsigned long g = (unsigned long)limit_range(acc[1] + 0.5f, 0.0f, (float)a);
+      unsigned long b = (unsigned long)limit_range(acc[2] + 0.5f, 0.0f, (float)a);
+      dst->data(x, y)._set(r, g, b, a); // already premultiplied
+    }
+  }
+}
+
+//-------------------------------------------------------------------------------------------------
+bool /*success*/ ReadPng(CContextRGBA* dst, string file_name, ostream* err_str, float scale)
+// outside interface, read the PNG file into the alpha context
+// DtBlkFix: scale it to "scale" pixels per view unit (dst keeps the original size in view units)
+{
+  if (scale == 1.0f) {
+    InternalReadPng read_png(dst, file_name, err_str);
+    return read_png.ok;
+  }
+
+  CContextRGBA orig;
+  {
+    InternalReadPng read_png(&orig, file_name, err_str);
+    if (!read_png.ok)
+      return false;
+  }
+  dst->create(orig.getWidth(), orig.getHeight(), scale);
+  if (!dst->ok())
+    return false;
+  ResampleImage(&orig, dst);
+  return true;
 }

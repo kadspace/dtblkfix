@@ -3546,8 +3546,19 @@ void COptionMenu::takeFocus ()
 	if (lastButton & kRButton)
 		flags |= TPM_RIGHTBUTTON;
 
+	// DtBlkFix: in pixels when the UI is scaled (rect = window position + offsets in view units)
+	long menu_x = (long)(rect.left + size.left);
+	float scale = getFrame ()->getScale ();
+	if (scale != 1.f)
+	{
+		RECT rctWin;
+		GetWindowRect (hwnd, &rctWin);
+		menu_x = rctWin.left + (long)floor ((rect.left - rctWin.left + size.left) * scale + 0.5f);
+		offset = rctWin.top + (long)floor ((offset - rctWin.top) * scale + 0.5f);
+	}
+
 	if (TrackPopupMenu ((HMENU)platformControl, flags, 
-			 (int)(rect.left + size.left), offset, 0, hwnd, 0))
+			 (int)menu_x, offset, 0, hwnd, 0))
 	{
 		if (PeekMessage (&msg, hwnd, WM_COMMAND, WM_COMMAND, PM_REMOVE))
 		{
