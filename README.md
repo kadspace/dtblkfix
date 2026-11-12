@@ -2,6 +2,13 @@
 
 DtBlkFx, fixed.
 
+<p>
+  <img src="docs/screenshot-original.png" alt="DtBlkFix with the Original skin" width="49%">
+  <img src="docs/screenshot-dark-boxes.png" alt="DtBlkFix with the Dark skin and Boxes style" width="49%">
+</p>
+
+**[Download DtBlkFix 1.0.0](https://github.com/kadspace/dtblkfix/releases/latest)**: free, Windows 64-bit VST3.
+
 DtBlkFx is Darrell Tam's FFT effect from 2005–2006: up to eight spectral effects in series, from harmonic filtering and pitch tracking to vocoding and contrast. There's still nothing quite like it, but a few things make it hard to use today. DtBlkFix fixes those and leaves the rest alone. It runs the same engine and sounds the same, and the original presets still work.
 
 ## Fixed
