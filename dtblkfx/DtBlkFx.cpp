@@ -626,7 +626,11 @@ inline void DtBlkFx::pollUpdate(bool force)
   _prev_poll_abs = _curr_samp_abs;
 
   // min number of samps we can mv fwd to get the next blk
+#if DTBLKFIX_WIN32_SHIM_LONG32
+  _min_blk_fwd_samps = max(64, (int)samps_per_tick);
+#else
   _min_blk_fwd_samps = max(64L, (long)samps_per_tick);
+#endif
 }
 
 //-------------------------------------------------------------------------------------------------

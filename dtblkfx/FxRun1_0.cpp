@@ -49,6 +49,10 @@ TODO:
   this is getting big and fat
 ***************************************************************************************************/
 
+#ifndef DTBLKFIX_INT64
+#  define DTBLKFIX_INT64 long long
+#endif
+
 #include <StdAfx.h>
 
 #define LOG_FILE_NAME "c:\\fx1_0.html"
@@ -74,7 +78,7 @@ class PhaseCorrect
 {
 public:
   // absolute sample position multiplied by sincos table length
-  long long _mult;
+  DTBLKFIX_INT64 _mult;
 
   int _fft_len;
 
@@ -91,7 +95,7 @@ public:
   // MUST call init before use
   void init(DtBlkFx* b)
   {
-    _mult = (long long)b->_blk_samp_abs * g_sincos_table.LEN;
+    _mult = (DTBLKFIX_INT64)b->_blk_samp_abs * g_sincos_table.LEN;
     _fft_len = b->_freq_fft_n;
   }
 };
@@ -1251,7 +1255,11 @@ public:
 
     // arbitrary sizes
     _type_a_low_bin = fft_len / 130;
+#if DTBLKFIX_WIN32_SHIM_LONG32
+    _type_b_width = max(fft_len / 700, 1);
+#else
     _type_b_width = max(fft_len / 700, 1L);
+#endif
   }
 
   void run(cplxf* dst, cplxf* src)
@@ -2020,7 +2028,11 @@ public:
   {
     // determine offset to apply to bins
     FixPoint<12> bin_shift = _parent->_curr_cent * _shift_mult;
+#if DTBLKFIX_WIN32_SHIM
+    _shift.template run</*CONJ*/ 0>(/*src first*/ b0, /*src last*/ b1, /*dst first*/ b0 + bin_shift);
+#else
     _shift.run</*CONJ*/ 0>(/*src first*/ b0, /*src last*/ b1, /*dst first*/ b0 + bin_shift);
+#endif
   }
 
   void done() { _shift.flush(); }

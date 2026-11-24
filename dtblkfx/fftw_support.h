@@ -1,6 +1,10 @@
 #ifndef _DT_FFTW_SUPPORT_H_
 #define _DT_FFTW_SUPPORT_H_
 
+#ifndef DTBLKFIX_INT64
+#  define DTBLKFIX_INT64 long long
+#endif
+
 #include "../fftw/fftw3.h"
 #include "FixPoint.h"
 #include "cplxf.h"
@@ -147,7 +151,7 @@ class ShiftPhaseCorrect
 {
 public:
   // absolute sample position
-  long long _mult;
+  DTBLKFIX_INT64 _mult;
 
   // fft length
   int _fft_len;

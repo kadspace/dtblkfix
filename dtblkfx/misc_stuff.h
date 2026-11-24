@@ -938,7 +938,11 @@ inline Rng<char> v_rng_sprf(Rng<char> dst, const char* fmt, const va_list args)
 
 //
 #ifdef _WIN32
+#  if DTBLKFIX_WIN32_SHIM
+  int n = dtblkfix_win32_vsnprintf(dst, dst.n, fmt, args);
+#  else
   int n = _vsnprintf_s(dst, dst.n, _TRUNCATE, fmt, const_cast<va_list>(args));
+#  endif
 
   // check for truncation
   if (n < 0) {
@@ -1210,7 +1214,11 @@ template <int LENGTH> struct SprfCharArray : public CharArray<LENGTH> {
 
 //
 #ifdef _WIN32
+#  if DTBLKFIX_WIN32_SHIM
+    _vsnprintf_s(this->data, LENGTH, _TRUNCATE, fmt, args);
+#  else
     _vsnprintf_s(data, LENGTH, _TRUNCATE, fmt, args);
+#  endif
 #else
     vsnprintf(this->data, LENGTH, fmt, args);
 #endif

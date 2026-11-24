@@ -180,3 +180,24 @@ jobs:
           name: screenshots
           path: build/screenshots
           if-no-files-found: ignore
+
+  macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Probe
+        run: |
+          clang++ --version
+          mkdir -p probe/vstsdk/public.sdk/source/vst2.x probe/public.sdk/source/vst2.x
+          for h in audioeffectx.h audioeffect.h aeffeditor.h; do
+            echo "#include \"$PWD/shim/$h\"" > probe/vstsdk/public.sdk/source/vst2.x/$h
+          done
+          echo "#include \"$PWD/shim/aeffeditor.h\"" > probe/public.sdk/source/vst2.x/aeffeditor.h
+          fail=0
+          for arch in arm64 x86_64; do
+            for f in vstgui/vstgui.cpp vstgui/vstcontrols.cpp vstgui/aeffguieditor.cpp $(ls dtblkfx/*.cpp | grep -v sweep) tests/render.cpp tests/sync_test.cpp tests/bridge_test.cpp tests/gui_snapshot.cpp; do
+              clang++ -arch $arch -mmacosx-version-min=10.13 -std=c++17 -fsyntax-only -ferror-limit=30 -w                 -fdelayed-template-parsing -Wno-c++11-narrowing -Wno-address-of-temporary                 -DSTEREO -DNOMINMAX -DDTBLKFIX_NO_VST2_MAIN                 -include shim/win32/prefix.h -Ishim/win32 -Iprobe -Ishim -Iprojects -I. -Idtblkfx -Izlib -Ilibpng -Ifftw                 $f 2> err.txt || { fail=1; echo "::group::$arch $f"; head -60 err.txt; echo "::endgroup::"; }
+            done
+          done
+          exit $fail

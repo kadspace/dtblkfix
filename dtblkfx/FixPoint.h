@@ -10,6 +10,10 @@ FixPoint template
 
 #include <math.h>
 
+#ifndef DTBLKFIX_INT64
+#  define DTBLKFIX_INT64 long long
+#endif
+
 template <
 	int FRAC_BITS_,		// number of bits to represent fractional part
 	class T = long,		// storage type (default 32 bits)
@@ -125,7 +129,9 @@ public: // constructors
 
 	// construct from integer type
 	FixPoint(int src) { val = (T)src << FRAC_BITS; }
+#if !DTBLKFIX_WIN32_SHIM_LONG32
 	FixPoint(T src) { val = src << FRAC_BITS; }
+#endif
 
 	// force number of fraction bits
 	FixPoint(T src, int src_frac_bits) { val = shiftUp(src, FRAC_BITS-src_frac_bits); }
@@ -147,14 +153,14 @@ public: // operators, note FixPoint is assumed to be left hand argument & precis
 	FixPoint operator >> (int s) const { return Pass(val>>s); }
 
 	// 64 bit precision fixed point division : careful that you don't overflow, division requires FRAC_BITS + FRAC_BITS2*2 fraction bits (+ 1 more bit if rounding)
-	template <int FRAC_BITS2> void doDiv64Trunc(FixPoint<FRAC_BITS2> div) { val = (T)(((long long)val<<FRAC_BITS2) / div.val); }
-	template <int FRAC_BITS2> void doDiv64Closest(FixPoint<FRAC_BITS2> div) { val = (T)((((long long)val<<(FRAC_BITS2+1))+div.val) / (div.val<<1)); }
+	template <int FRAC_BITS2> void doDiv64Trunc(FixPoint<FRAC_BITS2> div) { val = (T)(((DTBLKFIX_INT64)val<<FRAC_BITS2) / div.val); }
+	template <int FRAC_BITS2> void doDiv64Closest(FixPoint<FRAC_BITS2> div) { val = (T)((((DTBLKFIX_INT64)val<<(FRAC_BITS2+1))+div.val) / (div.val<<1)); }
 	template <int FRAC_BITS2> void doDiv32Trunc(FixPoint<FRAC_BITS2> div) { val = (T)(((long)val<<FRAC_BITS2) / div.val); }
 	template <int FRAC_BITS2> void doDiv32Closest(FixPoint<FRAC_BITS2> div) { val = (T)((((long)val<<(FRAC_BITS2+1))+div.val) / (div.val<<1)); }
 
 	// multiply requires FRAC_BITS+FRAC_BITS2
-	template <int FRAC_BITS2> void doMul64Trunc(FixPoint<FRAC_BITS2> mul) { val = (T)(((long long)val*(long long)mul.val) >> mul.FRAC_BITS); }
-	template <int FRAC_BITS2> void doMul64Closest(FixPoint<FRAC_BITS2> mul) { val = (T)(((long long)val*(long long)mul.val+mul.FracTopBit()) >> mul.FRAC_BITS); }
+	template <int FRAC_BITS2> void doMul64Trunc(FixPoint<FRAC_BITS2> mul) { val = (T)(((DTBLKFIX_INT64)val*(DTBLKFIX_INT64)mul.val) >> mul.FRAC_BITS); }
+	template <int FRAC_BITS2> void doMul64Closest(FixPoint<FRAC_BITS2> mul) { val = (T)(((DTBLKFIX_INT64)val*(DTBLKFIX_INT64)mul.val+mul.FracTopBit()) >> mul.FRAC_BITS); }
 	template <int FRAC_BITS2> void doMul32Trunc(FixPoint<FRAC_BITS2> mul) { val = (T)(((long)val*(long)mul.val) >> mul.FRAC_BITS); }
 	template <int FRAC_BITS2> void doMul32Closest(FixPoint<FRAC_BITS2> mul) { val = (T)(((long)val*(long)mul.val+mul.FracTopBit()) >> mul.FRAC_BITS); }
 
@@ -180,16 +186,20 @@ public: // operators, note FixPoint is assumed to be left hand argument & precis
 	FixPoint& operator *= (double other) { val = (T)((double)val * other); return *this; }
 	FixPoint operator * (int other) { return Pass(val * other); }
 	FixPoint& operator *= (int other) { val *= other; return *this; }
+#if !DTBLKFIX_WIN32_SHIM_LONG32
 	FixPoint operator * (T other) { return Pass(val * other); }
 	FixPoint& operator *= (T other) { val *= other; return *this; }
+#endif
 	FixPoint operator / (float other) { return Pass((T)((float)val / other)); }
 	FixPoint& operator /= (float other) { val = (T)((float)val / other); return *this; }
 	FixPoint operator / (double other) { return Pass((T)((double)val / other)); }
 	FixPoint& operator /= (double other) { val = (T)((double)val / other); return *this; }
 	FixPoint operator / (int other) { return Pass(val / other); }
 	FixPoint& operator /= (int other) { val /= other; return *this; }
+#if !DTBLKFIX_WIN32_SHIM_LONG32
 	FixPoint operator / (T other) { return Pass(val / other); }
 	FixPoint& operator /= (T other) { val /= other; return *this; }
+#endif
 
 	// comparisons, note that the RHS is cast to the same precision as LHS before compare
 	template<class R_TYPE> bool operator > (const R_TYPE& right) { return val > FixPoint(right).val; }
@@ -218,32 +228,46 @@ template <int FRAC_BITS, class T> inline FixPoint<FRAC_BITS, T> operator - (int 
 template <int FRAC_BITS, class T> inline FixPoint<FRAC_BITS, T> operator / (int left, const FixPoint<FRAC_BITS, T>& right) { return FixPoint<FRAC_BITS, T>(left) / right; }
 template <int FRAC_BITS, class T> inline FixPoint<FRAC_BITS, T> operator + (int left, const FixPoint<FRAC_BITS, T>& right) { return right + left; }
 template <int FRAC_BITS, class T> inline FixPoint<FRAC_BITS, T> operator * (int left, const FixPoint<FRAC_BITS, T>& right) { return right * left; }
+#if !DTBLKFIX_WIN32_SHIM_LONG32
 template <int FRAC_BITS, class T> inline FixPoint<FRAC_BITS, T> operator - (T left, const FixPoint<FRAC_BITS, T>& right) { return FixPoint<FRAC_BITS, T>(left) - right; }
 template <int FRAC_BITS, class T> inline FixPoint<FRAC_BITS, T> operator / (T left, const FixPoint<FRAC_BITS, T>& right) { return FixPoint<FRAC_BITS, T>(left) / right; }
 template <int FRAC_BITS, class T> inline FixPoint<FRAC_BITS, T> operator + (T left, const FixPoint<FRAC_BITS, T>& right) { return right + left; }
 template <int FRAC_BITS, class T> inline FixPoint<FRAC_BITS, T> operator * (T left, const FixPoint<FRAC_BITS, T>& right) { return right * left; }
+#endif
 template <int FRAC_BITS, class T> inline bool operator > (int left, const FixPoint<FRAC_BITS, T>& right) { return FixPoint<FRAC_BITS, T>(left).val > right.val; }
+#if !DTBLKFIX_WIN32_SHIM_LONG32
 template <int FRAC_BITS, class T> inline bool operator > (T left, const FixPoint<FRAC_BITS, T>& right) { return FixPoint<FRAC_BITS, T>(left).val > right.val; }
+#endif
 template <int FRAC_BITS, class T> inline bool operator > (float left, const FixPoint<FRAC_BITS, T>& right) { return left > (float)right; }
 template <int FRAC_BITS, class T> inline bool operator > (double left, const FixPoint<FRAC_BITS, T>& right) { return left > (double)right; }
 template <int FRAC_BITS, class T> inline bool operator >= (int left, const FixPoint<FRAC_BITS, T>& right) { return FixPoint<FRAC_BITS, T>(left).val >= right.val; }
+#if !DTBLKFIX_WIN32_SHIM_LONG32
 template <int FRAC_BITS, class T> inline bool operator >= (T left, const FixPoint<FRAC_BITS, T>& right) { return FixPoint<FRAC_BITS, T>(left).val >= right.val; }
+#endif
 template <int FRAC_BITS, class T> inline bool operator >= (float left, const FixPoint<FRAC_BITS, T>& right) { return left >= (float)right; }
 template <int FRAC_BITS, class T> inline bool operator >= (double left, const FixPoint<FRAC_BITS, T>& right) { return left >= (double)right; }
 template <int FRAC_BITS, class T> inline bool operator < (int left, const FixPoint<FRAC_BITS, T>& right) { return FixPoint<FRAC_BITS, T>(left).val < right.val; }
+#if !DTBLKFIX_WIN32_SHIM_LONG32
 template <int FRAC_BITS, class T> inline bool operator < (T left, const FixPoint<FRAC_BITS, T>& right) { return FixPoint<FRAC_BITS, T>(left).val < right.val; }
+#endif
 template <int FRAC_BITS, class T> inline bool operator < (float left, const FixPoint<FRAC_BITS, T>& right) { return left < (float)right; }
 template <int FRAC_BITS, class T> inline bool operator < (double left, const FixPoint<FRAC_BITS, T>& right) { return left < (double)right; }
 template <int FRAC_BITS, class T> inline bool operator <= (int left, const FixPoint<FRAC_BITS, T>& right) { return FixPoint<FRAC_BITS, T>(left).val <= right.val; }
+#if !DTBLKFIX_WIN32_SHIM_LONG32
 template <int FRAC_BITS, class T> inline bool operator <= (T left, const FixPoint<FRAC_BITS, T>& right) { return FixPoint<FRAC_BITS, T>(left).val <= right.val; }
+#endif
 template <int FRAC_BITS, class T> inline bool operator <= (float left, const FixPoint<FRAC_BITS, T>& right) { return left <= (float)right; }
 template <int FRAC_BITS, class T> inline bool operator <= (double left, const FixPoint<FRAC_BITS, T>& right) { return left <= (double)right; }
 template <int FRAC_BITS, class T> inline bool operator == (int left, const FixPoint<FRAC_BITS, T>& right) { return FixPoint<FRAC_BITS, T>(left).val == right.val; }
+#if !DTBLKFIX_WIN32_SHIM_LONG32
 template <int FRAC_BITS, class T> inline bool operator == (T left, const FixPoint<FRAC_BITS, T>& right) { return FixPoint<FRAC_BITS, T>(left).val == right.val; }
+#endif
 template <int FRAC_BITS, class T> inline bool operator == (float left, const FixPoint<FRAC_BITS, T>& right) { return left == (float)right; }
 template <int FRAC_BITS, class T> inline bool operator == (double left, const FixPoint<FRAC_BITS, T>& right) { return left == (double)right; }
 template <int FRAC_BITS, class T> inline bool operator != (int left, const FixPoint<FRAC_BITS, T>& right) { return FixPoint<FRAC_BITS, T>(left).val != right.val; }
+#if !DTBLKFIX_WIN32_SHIM_LONG32
 template <int FRAC_BITS, class T> inline bool operator != (T left, const FixPoint<FRAC_BITS, T>& right) { return FixPoint<FRAC_BITS, T>(left).val != right.val; }
+#endif
 template <int FRAC_BITS, class T> inline bool operator != (float left, const FixPoint<FRAC_BITS, T>& right) { return left != (float)right; }
 template <int FRAC_BITS, class T> inline bool operator != (double left, const FixPoint<FRAC_BITS, T>& right) { return left != (double)right; }
 
