@@ -24,13 +24,13 @@ Free software!
 #ifdef _WIN32
 #  include <windows.h>
 #  include <xmmintrin.h>
-#else // assume MAC
-#  include <Accelerate/Accelerate.h>
-#  include <libkern/OSAtomic.h>
-#  ifdef __ppc__
-
-#  else
-#    include "/usr/include/gcc/darwin/3.3/xmmintrin.h" // not sure why this isn't in 4.0
+#else
+#  include <atomic>
+#  include <mutex>
+#  include <stdint.h>
+#  include <windows.h>
+#  if defined(__x86_64__) || defined(__i386__)
+#    include <xmmintrin.h>
 #  endif
 #endif
 
@@ -96,7 +96,14 @@ Free software!
     }
 #endif
 
-typedef unsigned long uint32;
+#ifdef _WIN32
+typedef unsigned long ulong32;
+typedef long long32;
+#else
+typedef uint32_t ulong32;
+typedef int32_t long32;
+#endif
+typedef ulong32 uint32;
 
 //------------------------------------------------------------------------------------------
 inline int RndToInt(float v)
@@ -187,48 +194,50 @@ template <class T> inline bool GetProcAddress(T& result, HMODULE module, const c
   return t ? true : false;
 }
 
-#else // assume MAC OS X
+#else
 
-// wrap the MAC functions to look like windows
-inline long InterlockedIncrement(long* v)
+template <class T> inline T InterlockedIncrement(T* v)
 {
-  return (long)OSAtomicIncrement32Barrier((int32_t*)v);
+  return __atomic_add_fetch(v, 1, __ATOMIC_SEQ_CST);
 }
-inline long InterlockedDecrement(long* v)
+template <class T> inline T InterlockedDecrement(T* v)
 {
-  return (long)OSAtomicDecrement32Barrier((int32_t*)v);
-}
-
-inline int strnlen(const char* src, int max_n)
-{
-  const char* s = src;
-  const char* s_end = src + max_n;
-  while (s < s_end && *s)
-    s++;
-  return (int)(s - src);
+  return __atomic_sub_fetch(v, 1, __ATOMIC_SEQ_CST);
 }
 
-//------------------------------------------------------------------------------------------
-struct CriticalSectionWrapper
-// wrap a spinlock
+inline float InterlockedExchange(float* target, float new_value)
 {
-  OSSpinLock sl;
-  CriticalSectionWrapper() { sl = 0; }
-  void lock() { OSSpinLockLock(&sl); }
-  void unlock() { OSSpinLockUnlock(&sl); }
-  operator OSSpinLock*() { return &sl; }
+  uint32_t v;
+  memcpy(&v, &new_value, 4);
+  v = __atomic_exchange_n((uint32_t*)target, v, __ATOMIC_SEQ_CST);
+  float r;
+  memcpy(&r, &v, 4);
+  return r;
+}
+
+struct CriticalSectionWrapper {
+  std::recursive_mutex m;
+  void lock() { m.lock(); }
+  void unlock() { m.unlock(); }
+  operator CriticalSectionWrapper*() { return this; }
 };
 
-//------------------------------------------------------------------------------------------
+template <class T> inline bool GetProcAddress(T& result, HMODULE module, const char* fn_name)
+{
+  FARPROC t = GetProcAddress(module, fn_name);
+  result = (T)t;
+  return t ? true : false;
+}
+
 class ScopeCriticalSection {
 public:
-  OSSpinLock* sl;
-  ScopeCriticalSection(OSSpinLock* sl_)
+  CriticalSectionWrapper* cs;
+  ScopeCriticalSection(CriticalSectionWrapper* cs_)
   {
-    sl = sl_;
-    OSSpinLockLock(sl_);
+    cs = cs_;
+    cs->lock();
   }
-  ~ScopeCriticalSection() { OSSpinLockUnlock(sl); }
+  ~ScopeCriticalSection() { cs->unlock(); }
 };
 
 #endif
@@ -238,6 +247,20 @@ public:
 
 // leave these alone on PPC, by default denormals are off
 #  define SCOPE_NO_FP_EXCEPTIONS_OR_DENORMALS
+
+#elif defined(__aarch64__)
+struct ScopeNoFpExceptionsOrDenormals {
+  uint64_t prv_fpcr;
+  ScopeNoFpExceptionsOrDenormals()
+  {
+    __asm__ volatile("mrs %0, fpcr" : "=r"(prv_fpcr));
+    uint64_t new_fpcr = prv_fpcr | (1ull << 24);
+    __asm__ volatile("msr fpcr, %0" ::"r"(new_fpcr));
+  }
+  ~ScopeNoFpExceptionsOrDenormals() { __asm__ volatile("msr fpcr, %0" ::"r"(prv_fpcr)); }
+};
+#  define SCOPE_NO_FP_EXCEPTIONS_OR_DENORMALS                                                      \
+    ScopeNoFpExceptionsOrDenormals _scope_no_exceptions_or_denormals_
 
 #else // assume intel SSE
 struct ScopeNoFpExceptionsOrDenormals {
@@ -436,7 +459,11 @@ template <class I, class X> inline I wrap(I i, const X& x)
 inline long prbs32(long x)
 {
   // maximal length, taps 32 31 29 1, from wikipedia
+#ifdef _WIN32
   return ((unsigned long)x >> 1) ^ (-(x & 1) & 0xd0000001UL);
+#else
+  return (long)(int32_t)(((uint32_t)x >> 1) ^ ((0u - ((uint32_t)x & 1u)) & 0xd0000001u));
+#endif
 }
 
 //------------------------------------------------------------------------------------------
@@ -841,7 +868,7 @@ inline void MaybeSwap32(void* /*4-byte*/ dst, void* /*4-byte*/ src)
   dstc[3] = srcc[0];
 #else
   // little-endian (assume non word aligned is ok)
-  *(unsigned long*)dst = *(unsigned long*)src;
+  *(ulong32*)dst = *(ulong32*)src;
 #endif
 }
 
@@ -886,7 +913,7 @@ struct LittleEndianMemStr
     // NOTE: if there's a compile error here then "dst" does not point to a 4 byte quantity
     typedef char chk_type[sizeof(T) == 4 ? 1 : -1];
 
-    unsigned long v;
+    ulong32 v;
     MaybeSwap32(&v, &src);
     return ShiftDst(/*dst*/ this, /*src*/ &v);
   }
@@ -896,7 +923,7 @@ struct LittleEndianMemStr
     // NOTE: if there's a compile error here then "dst" does not point to a 4 byte quantity
     typedef char chk_type[sizeof(T) == 4 ? 1 : -1];
 
-    unsigned long v;
+    ulong32 v;
     if (!ShiftSrc(/*dst*/ &v, /*src*/ this))
       return false;
     MaybeSwap32(dst, &v);
@@ -927,7 +954,11 @@ struct LittleEndianMemStr
 };
 
 //-------------------------------------------------------------------------------------------------
+#ifdef _WIN32
 inline Rng<char> v_rng_sprf(Rng<char> dst, const char* fmt, const va_list args)
+#else
+inline Rng<char> v_rng_sprf(Rng<char> dst, const char* fmt, va_list args)
+#endif
 //
 // wrapper for vsnprintf to print into a range & return remaining
 //
@@ -946,7 +977,10 @@ inline Rng<char> v_rng_sprf(Rng<char> dst, const char* fmt, const va_list args)
     dst[n] = 0;
   }
 #else
-  int n = vsnprintf(dst, dst.n, fmt, const_cast<va_list>(args));
+  va_list args_copy;
+  va_copy(args_copy, args);
+  int n = vsnprintf(dst, dst.n, fmt, args_copy);
+  va_end(args_copy);
 
   // check for truncation
   if (n > dst.n - 1)

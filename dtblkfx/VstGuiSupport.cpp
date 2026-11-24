@@ -161,7 +161,7 @@ void OutlineDrawString(CDrawContext* context,
 //-------------------------------------------------------------------------------------------------
 CCoord StringWidth(CDrawContext* context, const char* str)
 {
-#ifdef _WIN32
+#if defined(_WIN32) || DTBLKFIX_SOFTWIN
   HDC dc = (HDC)context->getSystemContext();
   HGDIOBJ font = context->getFont() ? (HGDIOBJ)context->getFont()->getPlatformFont() : NULL;
   HGDIOBJ old_font = font ? SelectObject(dc, font) : NULL;
@@ -178,7 +178,7 @@ CCoord StringWidth(CDrawContext* context, const char* str)
 //-------------------------------------------------------------------------------------------------
 void DrawBox(CDrawContext* context, CRect r, const CColor& fill, const CColor& line, int radius)
 {
-#ifdef _WIN32
+#if defined(_WIN32) || DTBLKFIX_SOFTWIN
   HDC dc = (HDC)context->getSystemContext();
   r.offset(context->offset.h, context->offset.v);
   HBRUSH brush = CreateSolidBrush(RGB(fill.red, fill.green, fill.blue));
@@ -200,7 +200,7 @@ void DrawBox(CDrawContext* context, CRect r, const CColor& fill, const CColor& l
 //-------------------------------------------------------------------------------------------------
 void DrawArrow(CDrawContext* context, float x, float y, float size, int dir, const CColor& col)
 {
-#ifdef _WIN32
+#if defined(_WIN32) || DTBLKFIX_SOFTWIN
   // in hundredths of a view unit under a scaled world transform, so it's placed to a fraction
   // of a pixel at any scale
   HDC dc = (HDC)context->getSystemContext();
@@ -242,7 +242,7 @@ void DrawArrow(CDrawContext* context, float x, float y, float size, int dir, con
 void DrawGear(CDrawContext* context, float x, float y, float size, const CColor& col,
               const CColor& hole_col)
 {
-#ifdef _WIN32
+#if defined(_WIN32) || DTBLKFIX_SOFTWIN
   // like DrawArrow: in hundredths of a view unit under a scaled world transform
   HDC dc = (HDC)context->getSystemContext();
   XFORM old_xf;
@@ -416,7 +416,7 @@ void CContextRGBA::create(int width, int height, float scale)
   if (!_hbm)
     return;
 
-  _bitmap_data = (unsigned long*)data_;
+  _bitmap_data = (ulong32*)data_;
   _hbm_prev = SelectObject((HDC)pSystemContext, _hbm);
 
   // flush any pending drawing operations (I doubt that there would be any from us here)
@@ -510,7 +510,7 @@ void CContextRGBA::createFromResourceBitmap(int resoure_bitmap_id // resource bi
 //*************************************************************************************************
 
 void GenerateGradientRGBA(
-    Rng<unsigned long> dst,      // destination RGBA
+    Rng<ulong32> dst,      // destination RGBA
     Rng<Array<float, 5>> col_vec // 5 element array contains: position (0..1), r, g, b, a
 )
 // generate an RGBA gradient into dst_rgba from set points in "col_vec"

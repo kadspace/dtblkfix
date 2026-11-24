@@ -14,6 +14,8 @@ env:
   JUCE_TAG: "8.0.15"
   FFTW_URL: "https://fftw.org/pub/fftw/fftw-3.3.5-dll64.zip"
   FFTW_SHA256: "cfd88dc0e8d7001115ea79e069a2c695d52c8947f5b4f3b7ac54a192756f439f"
+  FFTW_SRC_URL: "https://fftw.org/pub/fftw/fftw-3.3.10.tar.gz"
+  FFTW_SRC_SHA256: "56c932549852cddcfafdab3820b0200c7742675be92179e59e6215b340e26467"
   # the original engine that renders are compared against (DtBlkFx with the latency fix)
   REFERENCE_COMMIT: "ab3dba73c7a7a424b8e6309a2c0a76a696504a62"
 
@@ -180,3 +182,124 @@ jobs:
           name: screenshots
           path: build/screenshots
           if-no-files-found: ignore
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: renders-windows
+          path: build/cmake/tests/renders/new_*.bin
+          if-no-files-found: ignore
+
+  macos:
+    runs-on: macos-15
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Version
+        run: |
+          version=$(sed -n 's/^project(DtBlkFix VERSION \([0-9.]*\).*//p' CMakeLists.txt)
+          echo "VERSION=$version" >> "$GITHUB_ENV"
+          echo "DtBlkFix $version"
+          uname -m
+          sw_vers
+
+      - name: FFTW (source, checksum checked, static, single precision, NEON)
+        run: |
+          mkdir -p build
+          curl -sSL -o build/fftw.tar.gz "$FFTW_SRC_URL"
+          echo "$FFTW_SRC_SHA256  build/fftw.tar.gz" | shasum -a 256 -c
+          tar -xzf build/fftw.tar.gz -C build
+          cd build/fftw-3.3.10
+          ./configure --prefix="$PWD/../fftw-mac" --enable-float --enable-neon --disable-fortran             --enable-static --disable-shared CFLAGS="-O3 -mmacosx-version-min=11.0" > /dev/null
+          make -j"$(sysctl -n hw.ncpu)" > /dev/null
+          make install > /dev/null
+          ls -l ../fftw-mac/lib/libfftw3f.a
+
+      - name: JUCE
+        run: git clone --depth 1 --branch "$JUCE_TAG" https://github.com/juce-framework/JUCE.git build/JUCE
+
+      - name: Configure
+        run: >
+          cmake -S . -B build/cmake -DCMAKE_BUILD_TYPE=Release
+          -DCMAKE_OSX_ARCHITECTURES=arm64 -DCMAKE_OSX_DEPLOYMENT_TARGET=11.0
+          "-DDTBLKFIX_JUCE_DIR=$PWD/build/JUCE"
+          "-DDTBLKFIX_FFTW_LIB=$PWD/build/fftw-mac/lib/libfftw3f.a"
+
+      - name: Build
+        run: cmake --build build/cmake --config Release --parallel "$(sysctl -n hw.ncpu)"
+
+      - name: Test
+        run: ctest --test-dir build/cmake -C Release --output-on-failure
+
+      - name: Renders of every factory preset
+        run: |
+          mkdir -p build/renders
+          cd build/cmake/tests
+          ./dtblkfix_render x ../../../resources/stereo_presets.txt ../../renders/new_as_is.bin > /dev/null
+          ./dtblkfix_render x ../../../resources/stereo_presets.txt ../../renders/new_sync_off.bin --sync-off > /dev/null
+          ./dtblkfix_render x ../../../resources/stereo_presets.txt ../../renders/new_sync_off_buf64.bin --sync-off --buf 64 > /dev/null
+          ls -l ../../renders
+
+      - name: Screenshots of the editor
+        run: bash tools/softwin_snapshots.sh build/cmake build/screenshots
+
+      - name: Sign and check the plugin
+        run: |
+          vst3=build/cmake/plugin/DtBlkFix_artefacts/Release/VST3/DtBlkFix.vst3
+          codesign --force --deep --sign - "$vst3"
+          codesign --verify --deep --strict "$vst3"
+          file "$vst3/Contents/MacOS/DtBlkFix"
+          ls "$vst3/Contents/Resources/dtblkfx"
+
+      - name: pluginval
+        run: |
+          curl -sSL -o build/pluginval.zip https://github.com/Tracktion/pluginval/releases/latest/download/pluginval_macOS.zip
+          unzip -q build/pluginval.zip -d build/pluginval
+          build/pluginval/pluginval.app/Contents/MacOS/pluginval --strictness-level 5 --skip-gui-tests             --validate build/cmake/plugin/DtBlkFix_artefacts/Release/VST3/DtBlkFix.vst3
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: DtBlkFix-${{ env.VERSION }}-mac-vst3
+          path: build/cmake/plugin/DtBlkFix_artefacts/Release/VST3
+          if-no-files-found: error
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: screenshots-mac
+          path: build/screenshots
+          if-no-files-found: ignore
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: renders-mac
+          path: build/renders
+          if-no-files-found: ignore
+
+  compare:
+    needs: [windows, macos]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: renders-windows
+          path: renders/windows
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: renders-mac
+          path: renders/mac
+
+      - name: Mac renders against Windows
+        run: |
+          pip install --quiet numpy
+          for case in as_is sync_off sync_off_buf64; do
+            echo "== $case"
+            python3 tools/render_diff.py renders/windows/new_$case.bin renders/mac/new_$case.bin
+          done

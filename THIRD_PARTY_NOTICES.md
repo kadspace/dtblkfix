@@ -9,8 +9,9 @@
 | libpng 1.2.10 | `libpng/` | © 1995–2006 Guy Eric Schalnat, Andreas Dilger, Glenn Randers-Pehrson | libpng license, [`libpng/LICENSE`](libpng/LICENSE) |
 | zlib 1.2.3 | `zlib/` | © 1995–2005 Jean-loup Gailly and Mark Adler | zlib license, [`zlib/README`](zlib/README) |
 | FFTW 3.3.5 headers | `fftw/` | © 2003, 2007–2014 Matteo Frigo and Massachusetts Institute of Technology | GPLv2 or later, [`fftw/COPYING`](fftw/COPYING) |
+| stb_truetype 1.28 | `softwin/stb_truetype.h` | © 2017 Sean Barrett | Public domain or MIT (in the file) |
 
-`shim/`, `plugin/`, `tests/`, `tools/`, `cmake/` and `packaging/` are DtBlkFix's own, under GPLv3. `shim/` is a clean-room stand-in for the parts of the VST 2 plugin base classes that the engine uses, written from the engine's code, not from Steinberg's headers. The Dark and Warm skins are made at build time from the DtBlkFx images in `resources/`.
+`shim/`, `softwin/` (apart from `stb_truetype.h`), `plugin/`, `tests/`, `tools/`, `cmake/` and `packaging/` are DtBlkFix's own, under GPLv3. `softwin/` stands in for the parts of the Windows API that the engine and VSTGUI use, so that they run on macOS; it is written from those calls' documented behaviour, not from Microsoft's or Wine's code. `shim/` is a clean-room stand-in for the parts of the VST 2 plugin base classes that the engine uses, written from the engine's code, not from Steinberg's headers. The Dark and Warm skins are made at build time from the DtBlkFx images in `resources/`.
 
 ## In the binaries, not in this repo
 
@@ -19,6 +20,7 @@
 | JUCE | 8.0.15 | © Raw Material Software Limited | AGPLv3 (or the commercial JUCE licence) |
 | VST3 SDK, as bundled with JUCE | | © 2025 Steinberg Media Technologies | MIT |
 | FFTW, `libfftw3f-3.dll` | 3.3.5, 64-bit, the official Windows build | © 2003, 2007–2014 Matteo Frigo and Massachusetts Institute of Technology | GPLv2 or later |
+| FFTW, linked into the macOS build | 3.3.10, single precision with NEON, built from fftw.org's source | © 2003, 2007–2017 Matteo Frigo and Massachusetts Institute of Technology | GPLv2 or later |
 
 CI clones JUCE at the tag above and downloads the FFTW DLLs from [fftw.org](https://www.fftw.org/install/windows.html), checking the zip's SHA-256. `DtBlkFix.vst3` carries the license texts of DtBlkFix, FFTW, JUCE and the VST3 SDK, and this file, and unpacks them to `%LOCALAPPDATA%\DtBlkFix\<version>\licenses` the first time it loads. FFTW's source is at [fftw.org](https://www.fftw.org/download.html); JUCE's is at [github.com/juce-framework/JUCE](https://github.com/juce-framework/JUCE).
 

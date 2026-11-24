@@ -67,13 +67,19 @@ void DtBlkFixEditor::openEditor()
   int scale_pct = _processor.view.scale_pct;
   _opened_pct = scale_pct;
 
-  engine.editorSize(scale_pct, _pix_width, _pix_height);
+  int render_pct = renderPct(scale_pct);
+  engine.editorSize(render_pct, _pix_width, _pix_height);
   {
+#if JUCE_WINDOWS
     // create it with the same DPI awareness as JUCE's window, so that it can be its child
     juce::ScopedThreadDPIAwarenessSetter dpi_awareness(peer->getNativeHandle());
+#else
+    _opened_factor = renderFactor();
+    _host.setPixelScale(_opened_factor);
+#endif
     void* window = engine.createEditorWindow(_pix_width, _pix_height);
     _host.setHWND(window);
-    engine.openEditor(window, scale_pct, skin_idx, _processor.view.style);
+    engine.openEditor(window, render_pct, skin_idx, _processor.view.style);
   }
   _open = true;
 
@@ -93,8 +99,27 @@ void DtBlkFixEditor::openEditor()
 float DtBlkFixEditor::displayScale()
 {
   // the original editor is sized in pixels, JUCE sizes in points
+#if JUCE_WINDOWS
   float scale = (float)juce::Component::getApproximateScaleFactorForComponent(this);
+#else
+  auto* display = juce::Desktop::getInstance().getDisplays().getDisplayForRect(getScreenBounds());
+  float scale = display ? (float)display->scale : 1.0f;
+#endif
   return scale > 0.0f ? scale : 1.0f;
+}
+
+float DtBlkFixEditor::renderFactor()
+{
+#if JUCE_WINDOWS
+  return 1.0f;
+#else
+  return displayScale();
+#endif
+}
+
+int DtBlkFixEditor::renderPct(int scale_pct)
+{
+  return juce::roundToInt(scale_pct * renderFactor());
 }
 
 int DtBlkFixEditor::fitScale()
@@ -107,7 +132,7 @@ int DtBlkFixEditor::fitScale()
   float fy = (float)getHeight() * s * 100.0f / (float)juce::jmax(1, h100);
   return juce::jlimit(dtblkfix::Engine::minScale(),
                       dtblkfix::Engine::maxScale(),
-                      (int)std::floor(juce::jmin(fx, fy)));
+                      (int)std::floor(juce::jmin(fx, fy) / renderFactor()));
 }
 
 void DtBlkFixEditor::layoutHost()
@@ -143,8 +168,8 @@ void DtBlkFixEditor::updateSize()
   // the largest
   dtblkfix::Engine& engine = _processor.engine();
   int min_w = 0, min_h = 0, max_w = 0, max_h = 0;
-  engine.editorSize(dtblkfix::Engine::minScale(), min_w, min_h);
-  engine.editorSize(dtblkfix::Engine::maxScale(), max_w, max_h);
+  engine.editorSize(renderPct(dtblkfix::Engine::minScale()), min_w, min_h);
+  engine.editorSize(renderPct(dtblkfix::Engine::maxScale()), max_w, max_h);
   if (auto* constrainer = getConstrainer()) {
     constrainer->setFixedAspectRatio(0.0);
     constrainer->setSizeLimits(juce::roundToInt(min_w / scale),
@@ -225,6 +250,12 @@ void DtBlkFixEditor::parentHierarchyChanged()
 
 void DtBlkFixEditor::timerCallback()
 {
+#if !JUCE_WINDOWS
+  if (_open && renderFactor() != _opened_factor) {
+    closeEditor();
+    openEditor();
+  }
+#endif
   openEditor();
   updateSize();
   if (_open)

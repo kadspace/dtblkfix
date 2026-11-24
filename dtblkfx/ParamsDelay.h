@@ -132,7 +132,11 @@ public:
     _data.resize(_record_len_bytes * _length);
 
     // clr first record
+#ifdef _WIN32
     memset(&begin(_data), 0, _record_len_bytes);
+#else
+    memset(_data.data(), 0, _record_len_bytes);
+#endif
 
     // by default no values are forced
     _override_param.resize(n_params, 0.0f);

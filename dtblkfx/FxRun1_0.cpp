@@ -2020,7 +2020,7 @@ public:
   {
     // determine offset to apply to bins
     FixPoint<12> bin_shift = _parent->_curr_cent * _shift_mult;
-    _shift.run</*CONJ*/ 0>(/*src first*/ b0, /*src last*/ b1, /*dst first*/ b0 + bin_shift);
+    _shift.template run</*CONJ*/ 0>(/*src first*/ b0, /*src last*/ b1, /*dst first*/ b0 + bin_shift);
   }
 
   void done() { _shift.flush(); }

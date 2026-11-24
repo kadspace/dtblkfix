@@ -30,8 +30,16 @@ foreach(fwd
 endforeach()
 
 # _HAS_AUTO_PTR_ETC: the engine uses std::auto_ptr, which MSVC's library drops from C++17 on
-set(DTBLKFIX_ENGINE_DEFS WIN32 _WINDOWS WINDOWS=1 STEREO NOMINMAX _CRT_SECURE_NO_WARNINGS
-    _HAS_AUTO_PTR_ETC=1)
+if(WIN32)
+  set(DTBLKFIX_ENGINE_DEFS WIN32 _WINDOWS WINDOWS=1 STEREO NOMINMAX _CRT_SECURE_NO_WARNINGS
+      _HAS_AUTO_PTR_ETC=1)
+else()
+  set(DTBLKFIX_ENGINE_DEFS WINDOWS=1 DTBLKFIX_SOFTWIN=1 STEREO NOMINMAX
+      _LIBCPP_ENABLE_CXX17_REMOVED_AUTO_PTR=1)
+endif()
+
+set(DTBLKFIX_SOFTWIN_DIR ${CMAKE_CURRENT_LIST_DIR}/../softwin)
+get_filename_component(DTBLKFIX_SOFTWIN_DIR ${DTBLKFIX_SOFTWIN_DIR} ABSOLUTE)
 
 function(dtblkfix_engine_options target)
   target_compile_definitions(${target} PRIVATE ${DTBLKFIX_ENGINE_DEFS})
@@ -39,10 +47,24 @@ function(dtblkfix_engine_options target)
     # as in projects/DTBlkFx.vcxproj (release|x64)
     target_compile_options(${target} PRIVATE /O2 /Ob2 /Oi /Ot /fp:fast /W1 /wd4996 /wd4244 /wd4267
                                              /permissive)
-  else()
+  elseif(WIN32)
     target_compile_options(${target} PRIVATE -O2 -ffast-math -msse2 -fpermissive -w)
+  else()
+    target_include_directories(${target} BEFORE PRIVATE ${DTBLKFIX_SOFTWIN_DIR})
+    target_compile_options(${target} PRIVATE -O2 -ffast-math -fdelayed-template-parsing
+                                             -fms-extensions -w)
   endif()
 endfunction()
+
+if(NOT WIN32 AND NOT TARGET dtblkfix_softwin)
+  add_library(dtblkfix_softwin STATIC ${DTBLKFIX_SOFTWIN_DIR}/softwin_gdi.cpp
+                                      ${DTBLKFIX_SOFTWIN_DIR}/softwin_text.cpp
+                                      ${DTBLKFIX_SOFTWIN_DIR}/softwin_wnd.cpp)
+  dtblkfix_engine_options(dtblkfix_softwin)
+  target_include_directories(dtblkfix_softwin INTERFACE ${DTBLKFIX_SOFTWIN_DIR})
+  find_package(Threads REQUIRED)
+  target_link_libraries(dtblkfix_softwin PUBLIC Threads::Threads ${CMAKE_DL_LIBS})
+endif()
 
 # libpng and zlib, as vendored
 function(dtblkfix_add_png target root)
@@ -54,8 +76,12 @@ function(dtblkfix_add_png target root)
   list(TRANSFORM z PREPEND ${root}/zlib/)
   add_library(${target} STATIC ${png} ${z})
   target_include_directories(${target} PUBLIC ${root}/zlib ${root}/libpng)
-  target_compile_definitions(${target} PRIVATE WIN32 NDEBUG _CRT_SECURE_NO_WARNINGS
-                                               PNG_NO_MMX_CODE)
+  if(WIN32)
+    target_compile_definitions(${target} PRIVATE WIN32 NDEBUG _CRT_SECURE_NO_WARNINGS
+                                                 PNG_NO_MMX_CODE)
+  else()
+    target_compile_definitions(${target} PRIVATE NDEBUG PNG_NO_MMX_CODE)
+  endif()
   if(MSVC)
     target_compile_options(${target} PRIVATE /W0)
   else()
@@ -83,6 +109,10 @@ function(dtblkfix_add_engine target root)
   target_compile_definitions(${target} PUBLIC STEREO)
   # the wrapper provides the entry points (DtBlkFxMain.cpp keeps them for the VST2 build)
   target_compile_definitions(${target} PRIVATE DTBLKFIX_NO_VST2_MAIN)
-  target_link_libraries(${target} PUBLIC dtblkfix_png user32 gdi32 msimg32 ole32 comdlg32 shell32
-                                         advapi32 uuid)
+  if(WIN32)
+    target_link_libraries(${target} PUBLIC dtblkfix_png user32 gdi32 msimg32 ole32 comdlg32 shell32
+                                           advapi32 uuid)
+  else()
+    target_link_libraries(${target} PUBLIC dtblkfix_png dtblkfix_softwin ${DTBLKFIX_FFTW_LIB})
+  endif()
 endfunction()

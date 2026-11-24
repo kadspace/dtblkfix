@@ -401,12 +401,12 @@ struct VstGuiRef
   // internal set
   void set(T* new_ptr)
   {
-    T* old_ptr = ptr;
+    T* old_ptr = this->ptr;
     if (new_ptr)
       new_ptr->remember();
     if (old_ptr)
       old_ptr->forget(); // object may get deleted at this point
-    ptr = new_ptr;
+    this->ptr = new_ptr;
   }
 
   // use this method to assign newly created objects (reference count of object stays the same)
@@ -424,7 +424,7 @@ struct VstGuiRef
   }
 
   // auto cast to compatible reference
-  template <class T2> operator VstGuiRef<T2>() const { return (VstGuiRef<T2>(ptr)); }
+  template <class T2> operator VstGuiRef<T2>() const { return (VstGuiRef<T2>(this->ptr)); }
 
   // template <class T2>
   //	VstGuiRef& operator = (const T2 &src) { set(src); return *this; }
@@ -551,32 +551,32 @@ public:
 
 //-------------------------------------------------------------------------------------------------
 struct PtrRGBA
-    : public _Ptr<unsigned long>
+    : public _Ptr<ulong32>
 // pixel pointer wrapper allowing efficient writing to 32 bit RGBA in-memory bitmaps
 // (channels in host order)
 {
   //
-  PtrRGBA(_Ptr<unsigned long> ptr_ = NULL) { ptr = ptr_; }
+  PtrRGBA(_Ptr<ulong32> ptr_ = NULL) { ptr = ptr_; }
 
   // raw get point, note that RGB is alpha prescaled
-  unsigned long _get() { return *ptr; }
+  ulong32 _get() { return *ptr; }
 
   // raw draw point (no premultiply applied)
-  void _set(unsigned long colour) { *ptr = colour; }
+  void _set(ulong32 colour) { *ptr = colour; }
 
   // raw draw point (no premultiply applied)
-  void _set(unsigned long r, unsigned long g, unsigned long b, unsigned long a)
+  void _set(ulong32 r, ulong32 g, ulong32 b, ulong32 a)
   {
     _set((a << 24) | (r << 16) | (g << 8) | b);
   }
 
   // draw opaque point (r,g,b: 0..255)
-  void set(unsigned long r, unsigned long g, unsigned long b) { _set(r, g, b, 255); }
+  void set(ulong32 r, ulong32 g, ulong32 b) { _set(r, g, b, 255); }
 
   // draw point with transparency and premultiplied alpha (r,g,b,a values should be 0..255)
   // all premultiplied alpha match round(channel*alpha/255)
   //
-  void set(unsigned long r, unsigned long g, unsigned long b, unsigned long a)
+  void set(ulong32 r, ulong32 g, ulong32 b, ulong32 a)
   {
     unsigned a1 = a * 257;
     // unsigned a1 = (a<<8)+a; // perhaps this is faster
@@ -595,11 +595,11 @@ struct PtrRGBA
   unsigned char getBlue() { return (unsigned char)(*ptr); }
 
   // operators do the same as "set"
-  void operator()(unsigned long r, unsigned long g, unsigned long b, unsigned long a)
+  void operator()(ulong32 r, ulong32 g, ulong32 b, ulong32 a)
   {
     set(r, g, b, a);
   }
-  void operator()(unsigned long r, unsigned long g, unsigned long b) { set(r, g, b); }
+  void operator()(ulong32 r, ulong32 g, ulong32 b) { set(r, g, b); }
   void operator()(CColor c) { set(c); }
 
   //
@@ -615,7 +615,7 @@ struct Ptr2dRGBA
   // in windows this is -width
   int longs_per_line;
 
-  Ptr2dRGBA(_Ptr<unsigned long> ptr_ = NULL, int longs_per_line_ = 0)
+  Ptr2dRGBA(_Ptr<ulong32> ptr_ = NULL, int longs_per_line_ = 0)
   {
     ptr = ptr_;
     longs_per_line = longs_per_line_;
@@ -630,17 +630,17 @@ struct RowRGBA
 // pointer to a horizontal line of pixels with an end pointer
 {
   // end pointer
-  unsigned long* end;
+  ulong32* end;
 
   //
-  RowRGBA(_Ptr<unsigned long> ptr_ = NULL, int width = 0)
+  RowRGBA(_Ptr<ulong32> ptr_ = NULL, int width = 0)
   {
     ptr = ptr_;
     end = ptr + width;
   }
 
   // can construct from a range
-  RowRGBA(Rng<unsigned long> src)
+  RowRGBA(Rng<ulong32> src)
   {
     ptr = src.ptr;
     end = ptr + src.n;
@@ -655,10 +655,10 @@ struct ColumnRGBA
 // pointer to a vertical line of pixels with an end pointer
 {
   // end pointer
-  unsigned long* end;
+  ulong32* end;
 
   //
-  ColumnRGBA(_Ptr<unsigned long> ptr_, int longs_per_line_, int height)
+  ColumnRGBA(_Ptr<ulong32> ptr_, int longs_per_line_, int height)
   {
     ptr = ptr_;
     longs_per_line = longs_per_line_;
@@ -768,7 +768,7 @@ public:
   {
     dst_rect = Offset(dst_context->offset, dst_rect);
     src_point += /*CDrawContext::*/ offset;
-#ifdef _WIN32
+#if defined(_WIN32) || DTBLKFIX_SOFTWIN
     // DtBlkFix: copy in pixels, either context may be scaled
     ScaledBlt(dst_context,
               dst_rect,
@@ -827,7 +827,7 @@ protected:
   HBITMAP _hbm;
   HGDIOBJ _hbm_prev;
 
-  _Ptr<unsigned long> _bitmap_data;
+  _Ptr<ulong32> _bitmap_data;
 };
 inline CRect GetRect(const CContextRGBA* t)
 {
@@ -836,7 +836,7 @@ inline CRect GetRect(const CContextRGBA* t)
 
 //-------------------------------------------------------------------------------------------------
 void GenerateGradientRGBA(
-    Rng<unsigned long> dst_rgba, // destination RGBA
+    Rng<ulong32> dst_rgba, // destination RGBA
     Rng<Array<float, 5>> col_vec // each 5-element array consists of: position (0..1), r, g, b, a
 );
 // generate an RGBA gradient into dst_rgba from set points in "col_vec"

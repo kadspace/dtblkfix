@@ -191,7 +191,7 @@ void Gui::setView(float scale, const GuiImages& images, const std::vector<std::s
 void Gui::makePalette()
 // DtBlkFix: light or dark text & boxes, from the brightness of the global controls' background
 {
-  unsigned long c = PtrRGBA(_images.glob_bg->data())._get(); // bottom left, plain background
+  ulong32 c = PtrRGBA(_images.glob_bg->data())._get(); // bottom left, plain background
   _palette.dark = ((c >> 16) & 0xff) * 3 + ((c >> 8) & 0xff) * 6 + (c & 0xff) < 1280;
   if (_palette.dark) {
     _palette.label = CColorRGB(150, 146, 190);

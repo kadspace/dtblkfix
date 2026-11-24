@@ -240,10 +240,10 @@ static void ResampleImage(CContextRGBA* src, CContextRGBA* dst)
         for (int c = 0; c < 4; c++)
           acc[c] += t.wt[j] * p[c];
       }
-      unsigned long a = (unsigned long)limit_range(acc[3] + 0.5f, 0.0f, 255.0f);
-      unsigned long r = (unsigned long)limit_range(acc[0] + 0.5f, 0.0f, (float)a);
-      unsigned long g = (unsigned long)limit_range(acc[1] + 0.5f, 0.0f, (float)a);
-      unsigned long b = (unsigned long)limit_range(acc[2] + 0.5f, 0.0f, (float)a);
+      ulong32 a = (ulong32)limit_range(acc[3] + 0.5f, 0.0f, 255.0f);
+      ulong32 r = (ulong32)limit_range(acc[0] + 0.5f, 0.0f, (float)a);
+      ulong32 g = (ulong32)limit_range(acc[1] + 0.5f, 0.0f, (float)a);
+      ulong32 b = (ulong32)limit_range(acc[2] + 0.5f, 0.0f, (float)a);
       dst->data(x, y)._set(r, g, b, a); // already premultiplied
     }
   }

@@ -195,7 +195,7 @@ public: // internal stuff
   bool openSgram(int i, CPoint* p);
 
   // gradient colour map to draw spectrum with
-  std::valarray<unsigned long> _col_map;
+  std::valarray<ulong32> _col_map;
 
   // pixel to frequency (Hz) mapping
   std::valarray<float> _pix_hz;
