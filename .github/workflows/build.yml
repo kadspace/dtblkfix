@@ -200,7 +200,7 @@ jobs:
 
       - name: Version
         run: |
-          version=$(sed -n 's/^project(DtBlkFix VERSION \([0-9.]*\).*//p' CMakeLists.txt)
+          version=$(sed -n 's/^project(DtBlkFix VERSION \([0-9.]*\).*/\1/p' CMakeLists.txt)
           echo "VERSION=$version" >> "$GITHUB_ENV"
           echo "DtBlkFix $version"
           uname -m
