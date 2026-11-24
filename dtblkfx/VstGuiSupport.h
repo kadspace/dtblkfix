@@ -401,12 +401,20 @@ struct VstGuiRef
   // internal set
   void set(T* new_ptr)
   {
+#if DTBLKFIX_WIN32_SHIM
+    T* old_ptr = this->ptr;
+#else
     T* old_ptr = ptr;
+#endif
     if (new_ptr)
       new_ptr->remember();
     if (old_ptr)
       old_ptr->forget(); // object may get deleted at this point
+#if DTBLKFIX_WIN32_SHIM
+    this->ptr = new_ptr;
+#else
     ptr = new_ptr;
+#endif
   }
 
   // use this method to assign newly created objects (reference count of object stays the same)
@@ -424,7 +432,11 @@ struct VstGuiRef
   }
 
   // auto cast to compatible reference
+#if DTBLKFIX_WIN32_SHIM
+  template <class T2> operator VstGuiRef<T2>() const { return (VstGuiRef<T2>(this->ptr)); }
+#else
   template <class T2> operator VstGuiRef<T2>() const { return (VstGuiRef<T2>(ptr)); }
+#endif
 
   // template <class T2>
   //	VstGuiRef& operator = (const T2 &src) { set(src); return *this; }

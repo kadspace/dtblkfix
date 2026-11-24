@@ -11,6 +11,10 @@ License, or (at your option) any later version.
 
 #ifdef __cplusplus
 
+#ifndef _LIBCPP_ENABLE_CXX17_REMOVED_AUTO_PTR
+#  define _LIBCPP_ENABLE_CXX17_REMOVED_AUTO_PTR 1
+#endif
+
 #include <algorithm>
 #include <cassert>
 #include <cctype>
@@ -53,9 +57,7 @@ License, or (at your option) any later version.
 #include <string.h>
 #include <time.h>
 
-#if defined(__x86_64__) || defined(__i386__) || defined(_M_X64) || defined(_M_IX86)
-#  include <xmmintrin.h>
-#endif
+#include <xmmintrin.h>
 
 #include <fftw3.h>
 #include <png.h>
