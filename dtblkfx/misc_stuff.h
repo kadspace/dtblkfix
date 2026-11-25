@@ -35,6 +35,48 @@ Free software!
 #endif
 
 #include <memory>
+
+#if !defined(_WIN32) && defined(_LIBCPP_VERSION) && !defined(_LIBCPP_ENABLE_CXX17_REMOVED_AUTO_PTR)
+namespace dtblkfix_compat {
+template <class T> class auto_ptr {
+public:
+  explicit auto_ptr(T* p = 0) : _p(p) {}
+  auto_ptr(auto_ptr& o) : _p(o.release()) {}
+  ~auto_ptr() { delete _p; }
+  auto_ptr& operator=(auto_ptr& o)
+  {
+    reset(o.release());
+    return *this;
+  }
+  auto_ptr& operator=(auto_ptr&& o)
+  {
+    reset(o.release());
+    return *this;
+  }
+  T* get() const { return _p; }
+  T& operator*() const { return *_p; }
+  T* operator->() const { return _p; }
+  T* release()
+  {
+    T* p = _p;
+    _p = 0;
+    return p;
+  }
+  void reset(T* p = 0)
+  {
+    if (p != _p)
+      delete _p;
+    _p = p;
+  }
+
+private:
+  T* _p;
+};
+}
+namespace std {
+using dtblkfix_compat::auto_ptr;
+}
+#endif
 #include <string>
 #include <valarray>
 #include <vector>
