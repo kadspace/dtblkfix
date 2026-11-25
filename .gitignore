@@ -348,3 +348,4 @@ vstsdk/
 
 # CMake build folder
 /build/
+STATUS.md
