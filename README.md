@@ -20,7 +20,7 @@ DtBlkFx is Darrell Tam's FFT effect from 2005–2006: up to eight spectral effec
 - **Easier to read.** Style **Boxes** puts each value in a box, in the top strip and the effect rows. **Original** keeps DtBlkFx's outlined text.
 - **Presets and settings at the top.** A bar across the top of the editor shows the preset: its number, its name (click it for the list), ← → for the previous and next, and a save button for your own presets. The gear at the right opens the settings: Size, Skin (Original, Dark, Warm) and Style.
 - **Effect rows.** The original always showed eight effect rows, most of them empty. DtBlkFix shows only the effects in use. **+** below them adds one, and the **×** at the left end of a row removes it.
-- **Format.** DtBlkFix is a VST3 for 64-bit Windows and for Macs with Apple Silicon. DtBlkFx was Windows-only.
+- **Format.** DtBlkFix is a VST3 for 64-bit Windows and for Macs with Apple Silicon. DtBlkFx's last Mac build was a 32-bit VST2 for PowerPC and Intel Macs, without the 1.1 interface, which no current Mac can run.
 
 Apart from Sync, the audio is bit-identical to the original. That's the whole list. There are no new effects. The only new controls are the preset bar (with saving your own presets), + and ×, and Size, Skin and Style; Delay and Sync are gone, and BlkLen shows the block length in ms and samples.
 
