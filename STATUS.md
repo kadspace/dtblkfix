@@ -8,7 +8,7 @@ GPLv3.
 - 1.0.0 (Windows) is merged to `main` and released (tag `v1.0.0`). The release is one file,
   `DtBlkFix.vst3`: the resources and licenses are packed into it (`tools/pack_resources.py`) and
   unpacked to `%LOCALAPPDATA%\DtBlkFix\<version>` on first load (`plugin/EngineBridge.cpp`).
-- 1.1.0 adds macOS (PR for issue #2, branch `mac-support`, waiting for Kas's approval). The engine
+- 1.1.0 adds macOS (PR #3, merged; not released yet). The engine
   and VSTGUI 3.5 editor are Windows code; on the Mac they run on `softwin/`, a software stand-in for
   the Windows API calls they use (GDI drawing, windows, messages, menus, an edit box, files), and
   `plugin/SoftwinView.cpp` shows the editor in JUCE at the display's pixel density. Arm64 VST3 +
@@ -26,9 +26,9 @@ GPLv3.
   while (same levels), as they also do between two Linux builds that differ only in FMA.
 
 ## Next up
-1. Kas approves the macOS PR, then tag `v1.1.0` (the release attaches both platforms).
-2. Try the VST3 in Live on the M6: install per the README, check the editor, menus, the preset name
-   box, the value popups while dragging, and resizing.
+1. Tag `v1.1.0` (the release attaches both platforms).
+2. Try the VST3 in a DAW on an Apple Silicon Mac: install per the README, check the editor, menus,
+   the preset name box, the value popups while dragging, and resizing.
 3. Launch: Gumroad listing (pay what you want, suggested $0), KVR, Reddit, producer Discords. The
    launch copy is kept outside this repo.
 4. Known issues to fix in a later release: not code-signed or notarized (Mac users need the `xattr`
@@ -46,8 +46,8 @@ GPLv3.
 - Shared code must stay identical on Windows: put Mac changes behind `_WIN32`/`DTBLKFIX_SOFTWIN`.
   Off Windows the engine is built with `WIN32` (only `vstgui.h` reads it, to pick its Windows code)
   but never `_WIN32`.
-- Develop the Mac side on Linux (WSL Ubuntu on the tower: clang, `libfftw3-dev`, JUCE's X11 deps,
-  Xvfb + xdotool for the standalone app). `tools/softwin_snapshots.sh` renders the editor headless.
+- Develop the Mac side on Linux (or WSL): clang, `libfftw3-dev`, JUCE's X11 deps, and Xvfb +
+  xdotool for the standalone app. `tools/softwin_snapshots.sh` renders the editor headless.
 - `softwin/windows.h` turns `fopen` into a macro that converts `\` paths; it must include `<cstdio>`
   first, and softwin's own sources `#undef` it.
 - Xcode 16's libc++ has no `std::auto_ptr`; `misc_stuff.h` supplies one there.
