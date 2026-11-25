@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.1.0
+
+### Added
+
+- **macOS.** A VST3 for Macs with Apple Silicon (macOS 11 or later), with the same editor, presets, skins and styles as the Windows version, and its settings saved in the same format.
+
+### Changed
+
+- Nothing on Windows. The engine and editor compile to the same machine code as in 1.0.0.
+
 ## 1.0.0
 
 The first release of DtBlkFix: Darrell Tam's DtBlkFx with the fixes below. The engine is the same, and the audio is bit-identical to the original except for Sync, which is now always on.

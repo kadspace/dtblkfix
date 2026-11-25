@@ -260,10 +260,16 @@ jobs:
           unzip -q build/pluginval.zip -d build/pluginval
           build/pluginval/pluginval.app/Contents/MacOS/pluginval --strictness-level 5 --skip-gui-tests             --validate build/cmake/plugin/DtBlkFix_artefacts/Release/VST3/DtBlkFix.vst3
 
+      - name: Package
+        run: |
+          mkdir -p build/package
+          ditto -c -k --keepParent build/cmake/plugin/DtBlkFix_artefacts/Release/VST3/DtBlkFix.vst3             build/package/DtBlkFix-macOS.zip
+          ls -l build/package
+
       - uses: actions/upload-artifact@v4
         with:
           name: DtBlkFix-${{ env.VERSION }}-mac-vst3
-          path: build/cmake/plugin/DtBlkFix_artefacts/Release/VST3
+          path: build/package/DtBlkFix-macOS.zip
           if-no-files-found: error
 
       - uses: actions/upload-artifact@v4
