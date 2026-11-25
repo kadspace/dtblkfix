@@ -38,7 +38,7 @@ public: // initialization routines that MUST be called before use
   // set the frequency-pixel mapping & initialize (must call before use)
   void init(CRect rect,                 // window position
             Rng<float> pix_hz,          // pixel to freq mapping (Spectrogram does NOT take a copy)
-            Rng<unsigned long> col_map, // colour map (pointers taken, memory is not copied)
+            Rng<ulong32> col_map, // colour map (pointers taken, memory is not copied)
             float octave_frac           // fraction of total span per octave
   );
 
@@ -152,7 +152,7 @@ protected: // internals
   bool updateHiliteRects(CDrawContext* context);
   void drawDirtyOverlay(CDrawContext* context);
 
-  unsigned long mapCol(float in);
+  ulong32 mapCol(float in);
 
   void
   getMaxVals(cplxf** bin_rng, // appropriate bin rng's from PixelFreqBin
@@ -177,7 +177,7 @@ protected:
   Rng<float> _pix_hz;
 
   // map to use for converting FFT bin pwr into a colour (host format RGBA)
-  Rng<unsigned long> _col_map;
+  Rng<ulong32> _col_map;
 
   // pixels per octave
   float _pix_per_octave;

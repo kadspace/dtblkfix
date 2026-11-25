@@ -64,6 +64,10 @@ static bool WritePng(const char* file, int w, int h, const std::vector<unsigned 
   return true;
 }
 
+#if DTBLKFIX_SOFTWIN
+static HWND g_wnd = NULL;
+#endif
+
 static void Pump()
 {
   MSG msg;
@@ -71,6 +75,9 @@ static void Pump()
     TranslateMessage(&msg);
     DispatchMessage(&msg);
   }
+#if DTBLKFIX_SOFTWIN
+  softwin::paintPending(g_wnd);
+#endif
 }
 
 int main(int argc, char** argv)
@@ -153,6 +160,9 @@ int main(int argc, char** argv)
                            NULL,
                            NULL);
   ShowWindow(wnd, SW_SHOW);
+#if DTBLKFIX_SOFTWIN
+  g_wnd = wnd;
+#endif
   if (!gui->open(wnd)) {
     fprintf(stderr, "couldn't open the editor\n");
     return 1;
@@ -178,6 +188,20 @@ int main(int argc, char** argv)
     Sleep(10);
   }
 
+#if DTBLKFIX_SOFTWIN
+  int w = gui->getScaledWidth(), h = gui->getScaledHeight();
+  int sw = 0, sh = 0;
+  const uint32_t* px = softwin::rootPixels(wnd, &sw, &sh);
+  std::vector<unsigned char> rgb((size_t)w * h * 3);
+  for (int y = 0; y < h && y < sh; y++)
+    for (int x = 0; x < w && x < sw; x++) {
+      uint32_t p = px[(size_t)y * sw + x];
+      size_t i = (size_t)y * w + x;
+      rgb[i * 3 + 0] = (unsigned char)(p >> 16);
+      rgb[i * 3 + 1] = (unsigned char)(p >> 8);
+      rgb[i * 3 + 2] = (unsigned char)p;
+    }
+#else
   // grab the client area off the screen
   POINT org = {0, 0};
   ClientToScreen(wnd, &org);
@@ -203,6 +227,7 @@ int main(int argc, char** argv)
     rgb[i * 3 + 1] = (unsigned char)(p >> 8);
     rgb[i * 3 + 2] = (unsigned char)p;
   }
+#endif
   bool ok = WritePng(argv[2], w, h, rgb);
   printf("%s: %dx%d at %d%%\n", argv[2], w, h, RndToInt(scale * 100.0f));
 

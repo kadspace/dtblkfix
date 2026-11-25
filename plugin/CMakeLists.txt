@@ -26,6 +26,11 @@ target_sources(DtBlkFix PRIVATE PluginProcessor.cpp PluginEditor.cpp)
 set(DTBLKFIX_JUCE_DEFS JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0 JUCE_VST3_CAN_REPLACE_VST2=0
     JUCE_REPORT_APP_USAGE=0 JUCE_STANDALONE_FILTER_WINDOW_USE_KIOSK_MODE=0
     JUCE_GUI_BASICS_INCLUDE_SCOPED_THREAD_DPI_AWARENESS_SETTER=1)
+if(NOT WIN32)
+  target_sources(DtBlkFix PRIVATE SoftwinView.cpp)
+  target_include_directories(DtBlkFix PRIVATE ${DTBLKFIX_SOFTWIN_DIR})
+  list(APPEND DTBLKFIX_JUCE_DEFS JUCE_MODAL_LOOPS_PERMITTED=1)
+endif()
 target_compile_definitions(DtBlkFix PUBLIC ${DTBLKFIX_JUCE_DEFS})
 target_link_libraries(DtBlkFix
   PRIVATE dtblkfix_bridge juce::juce_audio_utils juce::juce_gui_extra
@@ -33,12 +38,17 @@ target_link_libraries(DtBlkFix
 
 # its "dtblkfx" folder: in the VST3 bundle (Contents/Resources) and next to the standalone app
 dtblkfix_copy_resources(DtBlkFix_VST3 "$<TARGET_FILE_DIR:DtBlkFix_VST3>/../Resources/dtblkfx")
-dtblkfix_copy_resources(DtBlkFix_Standalone "$<TARGET_FILE_DIR:DtBlkFix_Standalone>/dtblkfx")
+if(APPLE)
+  dtblkfix_copy_resources(DtBlkFix_Standalone
+                          "$<TARGET_FILE_DIR:DtBlkFix_Standalone>/../Resources/dtblkfx")
+else()
+  dtblkfix_copy_resources(DtBlkFix_Standalone "$<TARGET_FILE_DIR:DtBlkFix_Standalone>/dtblkfx")
+endif()
 
 # the single-file VST3: the "dtblkfx" folder and the licenses, packed into the plugin as a resource
 # (tools/pack_resources.py). The plugin unpacks it to %LOCALAPPDATA%\DtBlkFix\<version> when there's
 # no "dtblkfx" folder beside it or in its bundle.
-if(DTBLKFIX_FFTW_DIR)
+if(WIN32 AND DTBLKFIX_FFTW_DIR)
   set(pack ${CMAKE_CURRENT_BINARY_DIR}/dtblkfix_resources.pak)
   set(licenses
     licenses/DtBlkFix-LICENSE.txt=${PROJECT_SOURCE_DIR}/LICENSE
@@ -71,6 +81,10 @@ if(DTBLKFIX_TESTS)
   juce_add_console_app(dtblkfix_plugin_test PRODUCT_NAME "dtblkfix_plugin_test")
   target_sources(dtblkfix_plugin_test PRIVATE
     ${PROJECT_SOURCE_DIR}/tests/plugin_test.cpp PluginProcessor.cpp PluginEditor.cpp)
+  if(NOT WIN32)
+    target_sources(dtblkfix_plugin_test PRIVATE SoftwinView.cpp)
+    target_include_directories(dtblkfix_plugin_test PRIVATE ${DTBLKFIX_SOFTWIN_DIR})
+  endif()
   target_include_directories(dtblkfix_plugin_test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
   target_compile_definitions(dtblkfix_plugin_test PRIVATE ${DTBLKFIX_JUCE_DEFS}
     JucePlugin_Name="DtBlkFix")
@@ -80,6 +94,8 @@ if(DTBLKFIX_TESTS)
   dtblkfix_copy_resources(dtblkfix_plugin_test "$<TARGET_FILE_DIR:dtblkfix_plugin_test>/dtblkfx")
   if(DTBLKFIX_FFTW_DIR)
     add_test(NAME plugin_state COMMAND dtblkfix_plugin_test)
+  endif()
+  if(WIN32 AND DTBLKFIX_FFTW_DIR)
 
     # the single-file VST3 in a host (tests/host_test.cpp): unpacking, then using what's unpacked
     juce_add_console_app(dtblkfix_host_test PRODUCT_NAME "dtblkfix_host_test")

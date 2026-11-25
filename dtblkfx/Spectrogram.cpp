@@ -56,7 +56,7 @@ Spectrogram::~Spectrogram()
 void Spectrogram::init(
     CRect rect,        // position & size of window
     Rng<float> pix_hz, // pixel to freq & width of client (Spectrogram does NOT take a copy)
-    Rng<unsigned long> col_map, // colour map
+    Rng<ulong32> col_map, // colour map
     float octave_frac           // fraction of total span per octave
 )
 //
@@ -184,7 +184,7 @@ void Spectrogram::suspend()
 }
 
 //-------------------------------------------------------------------------------------------------
-inline unsigned long Spectrogram::mapCol(float in)
+inline ulong32 Spectrogram::mapCol(float in)
 //
 // return the colour corresponding to log of "in"
 //

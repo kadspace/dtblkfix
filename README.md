@@ -7,7 +7,7 @@ DtBlkFx, fixed.
   <img src="docs/screenshot-dark-boxes.png" alt="DtBlkFix with the Dark skin and Boxes style" width="49%">
 </p>
 
-**[Download DtBlkFix 1.0.0](https://github.com/kadspace/dtblkfix/releases/latest)**: free, Windows 64-bit VST3.
+**[Download DtBlkFix 1.1.0](https://github.com/kadspace/dtblkfix/releases/latest)**: free, VST3 for Windows (64-bit) and macOS (Apple Silicon).
 
 DtBlkFx is Darrell Tam's FFT effect from 2005–2006: up to eight spectral effects in series, from harmonic filtering and pitch tracking to vocoding and contrast. There's still nothing quite like it, but a few things make it hard to use today. DtBlkFix fixes those and leaves the rest alone. It runs the same engine and sounds the same, and the original presets still work.
 
@@ -20,15 +20,21 @@ DtBlkFx is Darrell Tam's FFT effect from 2005–2006: up to eight spectral effec
 - **Easier to read.** Style **Boxes** puts each value in a box, in the top strip and the effect rows. **Original** keeps DtBlkFx's outlined text.
 - **Presets and settings at the top.** A bar across the top of the editor shows the preset: its number, its name (click it for the list), ← → for the previous and next, and a save button for your own presets. The gear at the right opens the settings: Size, Skin (Original, Dark, Warm) and Style.
 - **Effect rows.** The original always showed eight effect rows, most of them empty. DtBlkFix shows only the effects in use. **+** below them adds one, and the **×** at the left end of a row removes it.
-- **Format.** DtBlkFix is a 64-bit VST3.
+- **Format.** DtBlkFix is a VST3 for 64-bit Windows and for Macs with Apple Silicon. DtBlkFx's last Mac build was a 32-bit VST2 for PowerPC and Intel Macs, without the 1.1 interface, which no current Mac can run.
 
 Apart from Sync, the audio is bit-identical to the original. That's the whole list. There are no new effects. The only new controls are the preset bar (with saving your own presets), + and ×, and Size, Skin and Style; Delay and Sync are gone, and BlkLen shows the block length in ms and samples.
 
 ## Installing
 
-Windows 10 or later, 64-bit.
+**Windows** 10 or later, 64-bit. Download `DtBlkFix.vst3` from the [latest release](https://github.com/kadspace/dtblkfix/releases/latest) and copy it into your VST3 folder, usually `C:\Program Files\Common Files\VST3`. Then rescan plugins in your DAW. It's one file with everything it needs inside, its licenses included. The first time it loads, it unpacks them to `%LOCALAPPDATA%\DtBlkFix\1.1.0`.
 
-Download `DtBlkFix.vst3` from the [latest release](https://github.com/kadspace/dtblkfix/releases/latest) and copy it into your VST3 folder, usually `C:\Program Files\Common Files\VST3`. Then rescan plugins in your DAW. It's one file with everything it needs inside, its licenses included. The first time it loads, it unpacks them to `%LOCALAPPDATA%\DtBlkFix\1.0.0`.
+**macOS** 11 or later, on a Mac with Apple Silicon. Download `DtBlkFix-macOS.zip` from the [latest release](https://github.com/kadspace/dtblkfix/releases/latest), unzip it, and move `DtBlkFix.vst3` into `~/Library/Audio/Plug-Ins/VST3` (in Finder: Go, Go to Folder). The plugin isn't notarized by Apple, so macOS blocks a downloaded copy; run this once in Terminal, then rescan plugins in your DAW:
+
+```
+xattr -dr com.apple.quarantine ~/Library/Audio/Plug-Ins/VST3/DtBlkFix.vst3
+```
+
+The Mac version is the same editor and engine. Its audio matches the Windows version's to within rounding for most presets; the ones that track pitch can take a different path after a few seconds, because their decisions are sensitive to the last bit of a calculation, and Apple's chips round some of them differently.
 
 DtBlkFix has its own plugin ID, so it installs next to the original DtBlkFx and doesn't replace it. It has the same presets and saves its settings in the same format.
 
@@ -36,13 +42,13 @@ DtBlkFix has its own plugin ID, so it installs next to the original DtBlkFx and 
 
 The bar at the top shows the preset. Click ← or → for the previous or next one, or click its name for the list. **Reset this preset**, at the end of the list, puts the current preset back as it was.
 
-To save your own, click the save button next to the arrows, type a name and press Enter (Escape cancels). Your presets are listed under **User**, after the factory ones, and ← → go through them too. Each is a small text file in `Documents\DtBlkFix\Presets`, so you can back them up or share them; saving under a name that's already there replaces it, and deleting the file deletes the preset.
+To save your own, click the save button next to the arrows, type a name and press Enter (Escape cancels). Your presets are listed under **User**, after the factory ones, and ← → go through them too. Each is a small text file in `Documents\DtBlkFix\Presets` (`~/Documents/DtBlkFix/Presets` on a Mac), so you can back them up or share them; saving under a name that's already there replaces it, and deleting the file deletes the preset.
 
 Each row is an effect, run in order from the top. Click **+** below the last row to add one: it starts as a Filter over the whole range at 0 dB, which leaves the sound alone until you change it. Hover over a row and click the **×** at its left end to remove it; the effects below move up. An effect counts as in use if any of its settings isn't zero, which is what an empty slot is in the presets.
 
 Drag the bottom right corner (or the window's edge, if your DAW allows it) to any size and shape: the editor scales to the largest size that fits, and redraws sharp when you stop. The gear at the top right opens the settings in place of the spectrograms: **Size**, **Skin** (Original, Dark or Warm) and **Style** (Original, or Boxes, which is easier to read). A change applies straight away; click the gear again to go back. Size, skin and style are saved with the plugin's state.
 
-To make a skin, copy the `stereo_*.png` files from `%LOCALAPPDATA%\DtBlkFix\1.0.0\dtblkfx` into a new folder in its `skins` folder, keep their sizes, and edit them. The folder's name is the skin's name. The Dark and Warm skins are made from the originals by [`tools/make_skins.py`](tools/make_skins.py).
+To make a skin, copy the `stereo_*.png` files from `%LOCALAPPDATA%\DtBlkFix\1.1.0\dtblkfx` into a new folder in its `skins` folder, keep their sizes, and edit them. The folder's name is the skin's name. The Dark and Warm skins are made from the originals by [`tools/make_skins.py`](tools/make_skins.py).
 
 ## Building
 
@@ -55,6 +61,16 @@ ctest --test-dir build -C Release
 ```
 
 The VST3 ends up in `build/plugin/DtBlkFix_artefacts/Release/VST3`, as a bundle whose `Contents/x86_64-win/DtBlkFix.vst3` is the single-file plugin: with `DTBLKFIX_FFTW_DIR` set, the `dtblkfx` folder and the licenses are packed into it by [`tools/pack_resources.py`](tools/pack_resources.py). [`packaging/package.ps1`](packaging/package.ps1) copies it out for release. CMake also builds a standalone app, which CI uses for a resize test. The comparison against the original engine runs when `DTBLKFIX_REFERENCE_DIR` points to a checkout of it; [`.github/workflows/build.yml`](.github/workflows/build.yml) shows how CI does it, packaging included.
+
+On a Mac (Apple Silicon, Xcode 16 or later), build FFTW 3.3.10 as a static single-precision library (`./configure --enable-float --enable-neon --enable-static --disable-shared`), then:
+
+```
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_OSX_ARCHITECTURES=arm64 -DDTBLKFIX_JUCE_DIR=<JUCE> -DDTBLKFIX_FFTW_LIB=<path to libfftw3f.a>
+cmake --build build
+ctest --test-dir build
+```
+
+The engine and its editor are Windows code. On the Mac they run on [`softwin/`](softwin), which stands in for the part of the Windows API they use and draws in software; [`plugin/SoftwinView.cpp`](plugin/SoftwinView.cpp) shows the result in the JUCE editor. The same build runs on Linux with clang, which is a quick way to work on it: the tests and [`tools/softwin_snapshots.sh`](tools/softwin_snapshots.sh), which saves the editor at every size, skin and style, run there too.
 
 The plugin doesn't need the Steinberg VST2 SDK: `shim/` stands in for the few parts of it that the engine uses. If you have the SDK, `projects/DTBlkFx.sln` still builds the VST2: copy its `pluginterfaces/` and `public.sdk/` folders into `vstsdk/`, then open the solution or run `build_fork.bat`.
 

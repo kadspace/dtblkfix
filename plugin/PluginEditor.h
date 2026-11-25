@@ -10,6 +10,10 @@
 
 #include "PluginProcessor.h"
 
+#if !JUCE_WINDOWS
+#  include "SoftwinView.h"
+#endif
+
 class DtBlkFixEditor
     : public juce::AudioProcessorEditor
     , private juce::Timer {
@@ -44,6 +48,8 @@ private:
   void layoutHost();
   void applyDraggedSize();
   float displayScale();
+  float renderFactor();
+  int renderPct(int scale_pct);
   int fitScale();
 
   static constexpr int gripSize = 14; // points
@@ -51,7 +57,12 @@ private:
   DtBlkFixProcessor& _processor;
 
   // holds the window that the original editor (VSTGUI) opens in
+#if JUCE_WINDOWS
   juce::HWNDComponent _host;
+#else
+  SoftwinView _host;
+  float _opened_factor = 0.0f;
+#endif
   std::unique_ptr<Grip> _grip;
 
   // editor size in pixels & the display scale it was fitted for

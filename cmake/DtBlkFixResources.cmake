@@ -18,7 +18,7 @@ add_custom_command(OUTPUT ${DTBLKFIX_STAGE}/skins/.done
   COMMENT "Making the skins")
 
 set(fftw_copy "")
-if(DTBLKFIX_FFTW_DIR)
+if(WIN32 AND DTBLKFIX_FFTW_DIR)
   set(fftw_copy COMMAND ${CMAKE_COMMAND} -E copy ${DTBLKFIX_FFTW_DIR}/libfftw3f-3.dll
                 ${DTBLKFIX_STAGE})
 endif()

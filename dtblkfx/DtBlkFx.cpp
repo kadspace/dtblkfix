@@ -371,13 +371,13 @@ VstInt32 /*1=success*/ DtBlkFx::setChunk(void* vdata, VstInt32 n_bytes, bool isP
 {
   LittleEndianMemStr le_data(vdata, n_bytes);
 
-  unsigned long tag;
+  ulong32 tag;
   if (!le_data.get32(&tag))
     return 0;
   if (tag != CHUNK_TAG)
     return 0;
 
-  unsigned long vers;
+  ulong32 vers;
   if (!le_data.get32(&vers))
     return 0;
 
@@ -397,11 +397,11 @@ VstInt32 /*1=success*/ DtBlkFx::setChunk(void* vdata, VstInt32 n_bytes, bool isP
 
   // these versions are nearly the same
   if (vers == 100 || vers == 101) {
-    long num_programs;
+    long32 num_programs;
     if (!le_data.get32(&num_programs))
       return 0;
 
-    long curr_program;
+    long32 curr_program;
     if (vers == 101)
       if (!le_data.get32(&curr_program))
         return 0;
@@ -428,10 +428,10 @@ VstInt32 /*1=success*/ DtBlkFx::setChunk(void* vdata, VstInt32 n_bytes, bool isP
         return 0;
 
       // max number of programs that we can load
-      long max_num_programs = AudioEffect::numPrograms - 1;
+      long32 max_num_programs = AudioEffect::numPrograms - 1;
 
       // calculate the number of programs based on the number of bytes
-      num_programs = min((long)le_data.n / PackedBytesPerVstProgram(num_programs), num_programs);
+      num_programs = min((long32)le_data.n / PackedBytesPerVstProgram(num_programs), num_programs);
 
       // don't load more than what we have space for
       num_programs = min(max_num_programs, num_programs);

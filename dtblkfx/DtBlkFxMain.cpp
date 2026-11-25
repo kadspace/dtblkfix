@@ -34,6 +34,10 @@ void* hInstance;
 
 HINSTANCE g_dll_inst = NULL;
 
+#elif DTBLKFIX_SOFTWIN
+
+void* hInstance;
+
 #endif
 
 // full dir that our dll loaded from (including trailing slash)

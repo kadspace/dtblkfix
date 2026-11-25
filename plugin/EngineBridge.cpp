@@ -20,6 +20,7 @@ bool DtBlkFixLoadImages(const char* skin_dir, float scale, GuiImages* dst, ostre
 
 namespace dtblkfix {
 
+#ifdef _WIN32
 //-------------------------------------------------------------------------------------------------
 static HMODULE ThisModule()
 {
@@ -191,6 +192,35 @@ static std::string PluginDir()
   std::string unpacked = UnpackedDir(ThisModule());
   return unpacked.empty() ? dir : unpacked;
 }
+
+#else
+
+static HMODULE ThisModule()
+{
+  return GetModuleHandleA(NULL);
+}
+
+static bool Exists(const std::string& path)
+{
+  return GetFileAttributesA(path.c_str()) != INVALID_FILE_ATTRIBUTES;
+}
+
+// the folder holding "dtblkfx/": next to the binary, or in the bundle's Resources folder
+static std::string PluginDir()
+{
+  char path[4096] = {0};
+  GetModuleFileNameA(ThisModule(), path, sizeof(path) - 1);
+  std::string dir = path;
+  dir = dir.substr(0, dir.find_last_of('/') + 1);
+  if (Exists(dir + "dtblkfx"))
+    return dir;
+  std::string resources = dir + "../Resources/";
+  if (Exists(resources + "dtblkfx"))
+    return resources;
+  return dir;
+}
+
+#endif
 
 static std::string SkinDir(int idx)
 {

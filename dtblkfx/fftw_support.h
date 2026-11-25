@@ -72,6 +72,11 @@ inline fftwf_plan plan_dft_r2c_1d(int n, float* i, fftwf_complex* o, unsigned fl
 }
 }; // namespace FFTWf
 
+inline bool LoadFFTWfDll(std::vector<std::string>, std::ostream*)
+{
+  return true;
+}
+
 #endif
 
 //-------------------------------------------------------------------------------------------------
